@@ -1,0 +1,2339 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>La Bibliothèque Infinie</title>
+<style>
+    :root{
+        --ink:#e7d6b8;
+        --ink-dim:#a08a6a;
+        --gold:#d9a441;
+        --gold-soft:#b98a3a;
+        --umber:#160d08;
+        --line:#5a3f26;
+    }
+    *{ box-sizing:border-box; margin:0; padding:0; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; }
+    html,body{ width:100%; height:100%; overflow:hidden; background:#080402;
+        font-family:'Iowan Old Style','Palatino Linotype','Georgia',serif; color:var(--ink); }
+    #webgl-container{ width:100%; height:100%; display:block; position:absolute; inset:0; }
+
+    #vignette{ position:absolute; inset:0; pointer-events:none; z-index:5;
+        box-shadow:inset 0 0 220px 80px rgba(0,0,0,.85);
+        background:radial-gradient(circle at 50% 46%, transparent 40%, rgba(0,0,0,.35) 100%); }
+
+    #crosshair{ position:absolute; top:50%; left:50%; width:7px; height:7px;
+        border:1px solid rgba(0,0,0,.5); background:rgba(240,225,190,.55);
+        border-radius:50%; transform:translate(-50%,-50%);
+        transition:transform .12s ease, background-color .12s ease, box-shadow .12s ease;
+        pointer-events:none; z-index:10; }
+    #crosshair.active{ transform:translate(-50%,-50%) scale(2.1);
+        background:var(--gold); box-shadow:0 0 10px var(--gold); }
+
+    #prompt{ position:absolute; bottom:13%; left:50%; transform:translateX(-50%);
+        background:linear-gradient(180deg, rgba(30,18,12,.92), rgba(16,10,7,.92));
+        border:1px solid var(--line); padding:9px 22px; border-radius:3px;
+        font-size:14px; letter-spacing:.5px; pointer-events:none; display:none;
+        box-shadow:0 6px 24px rgba(0,0,0,.7); text-align:center; z-index:10; color:var(--ink); }
+    #prompt b{ color:var(--gold); }
+
+    #hud{ position:absolute; top:16px; left:50%; transform:translateX(-50%);
+        display:flex; gap:18px; align-items:center; z-index:10; pointer-events:none;
+        font-size:13px; letter-spacing:1px; color:var(--ink-dim); }
+    .hud-pill{ background:rgba(12,7,4,.6); border:1px solid var(--line);
+        padding:6px 14px; border-radius:2px; white-space:nowrap; }
+    .hud-pill b{ color:var(--gold); font-variant-numeric:tabular-nums; }
+
+    /* HUD des livres en main (couleurs) */
+    #carry{ position:absolute; left:50%; bottom:26px; transform:translateX(-50%);
+        display:flex; gap:10px; align-items:flex-end; z-index:10; pointer-events:auto; }
+    .carry-slot{ width:38px; height:54px; border-radius:3px;
+        border:1px solid var(--line); background:rgba(12,7,4,.55);
+        box-shadow:inset 0 0 10px rgba(0,0,0,.6); position:relative;
+        display:grid; place-items:center;
+        transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease; cursor:pointer; }
+    .carry-slot .cspine{ width:22px; height:42px; border-radius:2px; display:none; position:relative;
+        box-shadow:inset 2px 0 3px rgba(0,0,0,.45), inset -2px 0 3px rgba(0,0,0,.45); }
+    .carry-slot.filled .cspine{ display:block; }
+    .carry-slot .cspine::before{ content:''; position:absolute; left:2px; right:2px; top:9px; height:2px;
+        background:var(--band, rgba(255,230,160,.6)); box-shadow:0 22px 0 var(--band, rgba(255,230,160,.6)); }
+    .carry-slot.active{ transform:translateY(-8px) scale(1.06);
+        border-color:var(--gold); box-shadow:0 0 12px rgba(217,164,65,.55); }
+    .carry-slot .num{ position:absolute; bottom:-16px; left:0; right:0; text-align:center;
+        font-size:10px; letter-spacing:1px; color:var(--ink-dim); }
+
+    /* Boutique */
+    #store{ position:absolute; inset:0; z-index:60; display:none; flex-direction:column;
+        align-items:center; justify-content:center; padding:24px;
+        background:rgba(5,3,2,.9); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+    .store-panel{ width:min(680px,94vw);
+        background:linear-gradient(180deg, rgba(26,16,10,.96), rgba(14,9,6,.96));
+        border:1px solid var(--line); border-top:3px solid var(--gold-soft); border-radius:4px; padding:22px; }
+    .store-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; }
+    .store-head h2{ font-size:15px; letter-spacing:3px; color:var(--gold); font-weight:normal; text-transform:uppercase; }
+    .store-head span{ font-size:13px; color:var(--ink); }
+    .store-item{ display:flex; align-items:center; gap:14px; padding:12px 14px; border:1px solid var(--line);
+        border-radius:3px; margin-bottom:10px; background:rgba(10,6,4,.6); }
+    .store-item .info{ flex:1; }
+    .store-item .info b{ color:var(--ink); font-size:14px; }
+    .store-item .info .lvl{ font-size:11px; color:var(--gold-soft); margin-left:6px; }
+    .store-item .info .d{ color:var(--ink-dim); font-size:12px; font-style:italic; margin-top:3px; }
+    .store-item button{ font-family:inherit; font-size:12px; letter-spacing:1px; cursor:pointer; padding:8px 14px;
+        color:var(--ink); background:rgba(90,63,38,.4); border:1px solid var(--line); border-radius:2px; white-space:nowrap; }
+    .store-item button:hover:not(:disabled){ background:var(--gold-soft); color:var(--umber); }
+    .store-item button:disabled{ opacity:.4; cursor:default; }
+    .store-close{ margin-top:8px; text-align:center; color:var(--ink-dim); font-size:12px; }
+
+    /* Fenêtre de confirmation habillée */
+    #confirm{ position:absolute; inset:0; z-index:140; display:none; align-items:center; justify-content:center;
+        padding:24px; background:rgba(5,3,2,.9); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+    .confirm-panel{ width:min(460px,92vw); text-align:center;
+        background:linear-gradient(180deg, rgba(26,16,10,.97), rgba(14,9,6,.97));
+        border:1px solid var(--line); border-top:3px solid var(--gold-soft); border-radius:4px;
+        padding:26px 26px 22px; box-shadow:0 30px 80px rgba(0,0,0,.9); }
+    .confirm-panel .eyebrow{ font-size:11px; letter-spacing:5px; color:var(--gold-soft);
+        text-transform:uppercase; margin-bottom:14px; }
+    .confirm-panel h2{ font-size:20px; font-weight:normal; color:var(--ink); font-style:italic;
+        margin-bottom:12px; letter-spacing:.5px; }
+    .confirm-panel p{ font-size:13px; line-height:1.7; color:var(--ink-dim); margin-bottom:22px; }
+    .confirm-actions{ display:flex; gap:12px; justify-content:center; }
+    .confirm-btn{ font-family:inherit; font-size:12px; letter-spacing:2px; text-transform:uppercase; cursor:pointer;
+        padding:11px 22px; border-radius:2px; color:var(--umber); background:var(--gold-soft); border:1px solid var(--gold-soft); }
+    .confirm-btn:hover{ background:var(--gold); border-color:var(--gold); }
+    .confirm-btn.ghost{ color:var(--ink); background:rgba(90,63,38,.35); border:1px solid var(--line); }
+    .confirm-btn.ghost:hover{ background:rgba(90,63,38,.6); }
+
+    #panel{ position:absolute; top:16px; left:16px; z-index:10;
+        background:linear-gradient(180deg, rgba(14,9,6,.82), rgba(10,6,4,.82));
+        border:1px solid var(--line); border-left:3px solid var(--gold-soft);
+        padding:14px 16px; font-size:12px; line-height:1.9; color:var(--ink-dim);
+        max-width:240px; border-radius:2px; }
+    #panel h2{ font-size:11px; letter-spacing:3px; color:var(--gold); font-weight:normal;
+        margin-bottom:8px; text-transform:uppercase; }
+    #panel kbd{ display:inline-block; min-width:16px; text-align:center; color:var(--ink);
+        background:rgba(90,63,38,.35); border:1px solid var(--line); border-radius:3px;
+        padding:1px 5px; font-family:inherit; font-size:11px; }
+    #panel .row{ margin-bottom:2px; }
+
+    .icon-btn{ position:absolute; z-index:11; width:38px; height:38px; border-radius:2px;
+        background:rgba(12,7,4,.7); border:1px solid var(--line); color:var(--gold);
+        cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; }
+    .icon-btn:hover{ border-color:var(--gold-soft); }
+    #btn-store{ top:16px; right:16px; z-index:120; }
+    #btn-menu{ top:16px; right:60px; z-index:120; }
+
+    /* ---- Menu du jeu (statistiques + réglages) ---- */
+    #menu{ position:absolute; inset:0; z-index:130; display:none; align-items:center; justify-content:center;
+        padding:24px; background:rgba(5,3,2,.9); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+    .menu-panel{ width:min(560px,94vw); max-height:88vh; overflow:auto;
+        background:linear-gradient(180deg, rgba(26,16,10,.97), rgba(14,9,6,.97));
+        border:1px solid var(--line); border-top:3px solid var(--gold-soft); border-radius:4px;
+        padding:26px 26px 22px; box-shadow:0 30px 80px rgba(0,0,0,.9); }
+    .menu-panel .eyebrow{ font-size:11px; letter-spacing:5px; color:var(--gold-soft);
+        text-transform:uppercase; margin-bottom:6px; text-align:center; }
+    .menu-panel h2{ font-size:22px; font-weight:normal; color:var(--ink); font-style:italic;
+        text-align:center; letter-spacing:.5px; margin-bottom:20px; }
+    .menu-section-title{ font-size:11px; letter-spacing:3px; color:var(--gold); text-transform:uppercase;
+        margin:20px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+    .menu-section-title:first-of-type{ margin-top:0; }
+
+    .stat-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+    .stat-cell{ background:rgba(10,6,4,.6); border:1px solid var(--line); border-radius:3px;
+        padding:12px 14px; }
+    .stat-cell .lab{ font-size:10px; letter-spacing:2px; color:var(--ink-dim); text-transform:uppercase; }
+    .stat-cell .val{ font-size:20px; color:var(--gold); font-variant-numeric:tabular-nums; margin-top:4px; }
+    .stat-cell .val small{ font-size:12px; color:var(--ink-dim); }
+
+    .menu-row{ display:flex; align-items:center; justify-content:space-between; gap:14px;
+        padding:11px 2px; }
+    .menu-row .mr-label{ font-size:13px; color:var(--ink); }
+    .menu-row .mr-label .mr-sub{ display:block; font-size:11px; color:var(--ink-dim); font-style:italic; margin-top:2px; }
+    /* interrupteur */
+    .toggle{ position:relative; width:46px; height:24px; flex:none; cursor:pointer;
+        background:rgba(90,63,38,.35); border:1px solid var(--line); border-radius:14px; transition:background .2s; }
+    .toggle .knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
+        background:var(--ink-dim); transition:transform .2s, background .2s; }
+    .toggle.on{ background:rgba(217,164,65,.35); border-color:var(--gold-soft); }
+    .toggle.on .knob{ transform:translateX(22px); background:var(--gold); }
+    /* curseur de volume */
+    .vol-row{ display:flex; align-items:center; gap:12px; padding:6px 2px 12px; }
+    .vol-row label{ font-size:13px; color:var(--ink); min-width:78px; }
+    input[type=range]{ -webkit-appearance:none; appearance:none; flex:1; height:3px; border-radius:2px;
+        background:linear-gradient(90deg,var(--gold-soft),var(--line)); outline:none; }
+    input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:16px; height:16px;
+        border-radius:50%; background:var(--gold); border:1px solid var(--umber); cursor:pointer; }
+    input[type=range]::-moz-range-thumb{ width:16px; height:16px; border-radius:50%; background:var(--gold);
+        border:1px solid var(--umber); cursor:pointer; }
+    input[type=range]:disabled{ opacity:.4; }
+
+    .menu-btn{ width:100%; font-family:inherit; font-size:12px; letter-spacing:2px; text-transform:uppercase;
+        cursor:pointer; padding:12px 18px; margin-top:8px; border-radius:2px;
+        color:var(--ink); background:rgba(90,63,38,.35); border:1px solid var(--line); }
+    .menu-btn:hover{ background:rgba(90,63,38,.6); border-color:var(--gold-soft); }
+    .menu-btn.danger:hover{ background:#7a2318; color:var(--ink); border-color:#7a2318; }
+    .menu-btn.resume{ color:var(--umber); background:var(--gold-soft); border-color:var(--gold-soft);
+        font-size:13px; margin-top:0; margin-bottom:4px; }
+    .menu-btn.resume:hover{ background:var(--gold); border-color:var(--gold); }
+    .menu-close{ margin-top:18px; text-align:center; color:var(--ink-dim); font-size:12px; }
+    .menu-close b{ color:var(--gold); }
+
+    /* répartition des rayons complétés par couleur */
+    .color-stats{ display:flex; flex-direction:column; gap:8px; }
+    .color-row{ display:flex; align-items:center; gap:10px; }
+    .color-row .swatch{ width:16px; height:16px; border-radius:3px; flex:none;
+        border:1px solid rgba(0,0,0,.4); box-shadow:inset 0 0 4px rgba(0,0,0,.5); }
+    .color-row .cname{ font-size:12px; color:var(--ink); min-width:56px; }
+    .color-row .bar{ flex:1; height:8px; border-radius:4px; background:rgba(90,63,38,.25); overflow:hidden; }
+    .color-row .bar i{ display:block; height:100%; border-radius:4px; }
+    .color-row .cnum{ font-size:12px; color:var(--gold); font-variant-numeric:tabular-nums; min-width:20px; text-align:right; }
+    .color-stats .none{ font-size:12px; color:var(--ink-dim); font-style:italic; }
+    .color-pref{ margin-top:12px; font-size:12.5px; line-height:1.6; color:var(--ink);
+        font-style:italic; padding:11px 14px; border:1px solid var(--gold-soft); border-radius:3px;
+        background:rgba(217,164,65,.08); }
+    .color-pref b{ font-style:normal; color:var(--gold); }
+    .color-pref.empty{ border-color:var(--line); background:rgba(10,6,4,.5); color:var(--ink-dim); }
+
+    #start{ position:absolute; inset:0; z-index:100; cursor:pointer; text-align:center;
+        padding:24px; display:flex; flex-direction:column; justify-content:center; align-items:center;
+        background:radial-gradient(circle at 50% 40%, #1c110a 0%, #0a0503 70%, #050302 100%); }
+    #start .eyebrow{ font-size:11px; letter-spacing:6px; color:var(--gold-soft);
+        text-transform:uppercase; margin-bottom:22px; }
+    #start h1{ font-size:clamp(2.1rem,7vw,4.2rem); font-weight:normal; letter-spacing:.06em;
+        color:var(--ink); line-height:1.05; text-shadow:0 2px 30px rgba(0,0,0,.8); }
+    #start .rule{ width:90px; height:1px; background:var(--gold-soft); margin:26px 0; opacity:.7; }
+    #start p{ font-size:clamp(.95rem,2.4vw,1.15rem); color:var(--ink-dim); max-width:520px;
+        line-height:1.7; margin-bottom:34px; font-style:italic; }
+    #start .btn{ pointer-events:none; border:1px solid var(--gold-soft);
+        padding:14px 40px; background:rgba(40,25,15,.5); color:var(--ink);
+        font-family:inherit; font-size:.95rem; letter-spacing:4px; text-transform:uppercase;
+        transition:background .2s, color .2s; }
+    #start:hover .btn{ background:var(--gold-soft); color:var(--umber); }
+    #start .hint{ margin-top:26px; font-size:11px; letter-spacing:2px; color:#6e5a3f; font-style:normal; }
+
+    #pause{ position:absolute; inset:0; z-index:100; cursor:pointer; display:flex;
+        flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px;
+        background:radial-gradient(circle at 50% 45%, rgba(20,12,7,.92) 0%, rgba(6,3,2,.96) 75%); }
+    #pause .eyebrow{ font-size:11px; letter-spacing:6px; color:var(--gold-soft); text-transform:uppercase; margin-bottom:16px; }
+    #pause h2{ font-size:clamp(1.6rem,5vw,2.6rem); font-weight:normal; letter-spacing:.05em; color:var(--ink); font-style:italic; }
+    #pause .btn{ pointer-events:none; margin-top:26px; border:1px solid var(--gold-soft);
+        padding:12px 34px; background:rgba(40,25,15,.5); color:var(--ink);
+        font-family:inherit; font-size:.9rem; letter-spacing:4px; text-transform:uppercase; transition:background .2s,color .2s; }
+    #pause:hover .btn{ background:var(--gold-soft); color:var(--umber); }
+    #pause .hint{ margin-top:22px; font-size:11px; letter-spacing:2px; color:#6e5a3f; }
+
+    #reader{ position:absolute; inset:0; z-index:50; display:none;
+        justify-content:center; align-items:center; padding:20px;
+        background:rgba(5,3,2,.86); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+    .book{ width:min(860px,94vw); height:min(560px,86vh); position:relative;
+        background:linear-gradient(90deg,#2a1a11,#3a2416 6%,#2a1a11 50%,#3a2416 94%,#2a1a11);
+        border:2px solid var(--line); border-radius:6px; padding:18px;
+        display:flex; gap:2px; box-shadow:0 30px 80px rgba(0,0,0,.9), inset 0 0 40px rgba(0,0,0,.6); }
+    .spine{ position:absolute; left:50%; top:12px; bottom:12px; width:10px; transform:translateX(-50%);
+        background:linear-gradient(90deg, rgba(0,0,0,.5), rgba(0,0,0,.15), rgba(0,0,0,.5)); z-index:2; }
+    .page{ flex:1; background:#efe2c4; color:#332616; padding:30px 30px 22px;
+        display:flex; flex-direction:column; overflow:hidden;
+        box-shadow:inset 0 0 60px rgba(120,90,50,.25); }
+    .page.left{ border-radius:3px 0 0 3px; }
+    .page.right{ border-radius:0 3px 3px 0; }
+    .page .title{ font-size:13px; letter-spacing:1px; color:#6a4d2a; text-align:center;
+        border-bottom:1px solid #d8c6a1; padding-bottom:8px; margin-bottom:12px; font-style:italic;
+        min-height:2.4em; }
+    .page .body{ flex:1; overflow:hidden; text-align:justify; hyphens:auto;
+        font-family:'Courier New',monospace; font-size:12.5px; line-height:1.75; color:#3d2f1c; }
+    .page .fragment{ font-family:inherit; font-style:italic; font-size:16px; line-height:1.6;
+        color:#5a2417; text-align:center; margin-bottom:14px; padding:10px 6px;
+        border:1px solid #c9a86f; background:rgba(217,164,65,.10); border-radius:3px; }
+    .page .num{ text-align:center; font-size:10px; color:#8a7757; margin-top:10px; }
+    .reader-bar{ position:absolute; left:0; right:0; bottom:-42px; display:flex;
+        justify-content:space-between; align-items:center; color:var(--ink-dim); font-size:12px; letter-spacing:1px; }
+    .reader-bar b{ color:var(--gold); }
+    @media (max-width:560px){
+        .book{ flex-direction:column; height:min(78vh,620px); }
+        .page.left{ border-radius:3px 3px 0 0; } .page.right{ border-radius:0 0 3px 3px; }
+        .spine{ display:none; }
+        .page .body{ font-size:11px; }
+        .reader-bar{ bottom:-38px; font-size:10px; }
+    }
+
+    #toast{ position:absolute; bottom:22%; left:50%; transform:translateX(-50%) translateY(10px);
+        z-index:40; background:rgba(12,7,4,.92); border:1px solid var(--gold-soft);
+        border-radius:3px; padding:14px 26px; text-align:center; opacity:0; pointer-events:none;
+        transition:opacity .5s ease, transform .5s ease; max-width:80vw; }
+    #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+    #toast .k{ font-size:11px; letter-spacing:3px; color:var(--gold); text-transform:uppercase; }
+    #toast .t{ font-size:15px; color:var(--ink); font-style:italic; margin-top:6px; }
+
+    #touch{ position:absolute; inset:0; z-index:20; display:none; }
+    #joy{ position:absolute; left:26px; bottom:26px; width:130px; height:130px; border-radius:50%;
+        background:rgba(20,12,8,.35); border:1px solid var(--line); }
+    #joy-stick{ position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px;
+        border-radius:50%; background:rgba(217,164,65,.35); border:1px solid var(--gold-soft); }
+    .touch-btn{ position:absolute; right:26px; width:76px; height:76px; border-radius:50%;
+        background:rgba(20,12,8,.5); border:1px solid var(--line); color:var(--gold);
+        display:flex; align-items:center; justify-content:center; font-size:12px; letter-spacing:1px;
+        text-align:center; line-height:1.1; }
+    #t-act{ bottom:120px; } #t-read{ bottom:36px; right:120px; } #t-throw{ bottom:36px; }
+
+    #inv{ position:absolute; inset:0; z-index:55; display:none; padding:24px;
+        justify-content:center; align-items:center;
+        background:rgba(5,3,2,.9); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+    .inv-panel{ width:min(900px,94vw); max-height:86vh; display:flex; flex-direction:column;
+        background:linear-gradient(180deg, rgba(26,16,10,.96), rgba(14,9,6,.96));
+        border:1px solid var(--line); border-top:3px solid var(--gold-soft); border-radius:4px;
+        box-shadow:0 30px 80px rgba(0,0,0,.9); }
+    .inv-head{ display:flex; justify-content:space-between; align-items:baseline;
+        padding:18px 22px; border-bottom:1px solid var(--line); }
+    .inv-head h2{ font-size:15px; letter-spacing:3px; color:var(--gold); font-weight:normal; text-transform:uppercase; }
+    .inv-head span{ font-size:12px; color:var(--ink-dim); letter-spacing:1px; }
+    .inv-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr));
+        gap:16px; padding:22px; overflow:auto; }
+    .inv-card{ background:rgba(10,6,4,.6); border:1px solid var(--line); border-radius:3px;
+        padding:14px 10px; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; }
+    .inv-card.frag{ border-color:var(--gold-soft); box-shadow:inset 0 0 24px rgba(217,164,65,.18); }
+    .inv-card canvas{ border-radius:2px; box-shadow:0 6px 14px rgba(0,0,0,.6); }
+    .inv-title{ font-size:12px; color:var(--ink); font-style:italic; line-height:1.3; min-height:2.4em; }
+    .inv-actions{ display:flex; gap:6px; margin-top:2px; flex-wrap:wrap; justify-content:center; }
+    .inv-actions button{ font-family:inherit; font-size:11px; letter-spacing:1px; cursor:pointer;
+        color:var(--ink); background:rgba(90,63,38,.4); border:1px solid var(--line);
+        border-radius:2px; padding:5px 10px; }
+    .inv-actions button:hover{ background:var(--gold-soft); color:var(--umber); }
+    .inv-actions button.danger:hover{ background:#7a2318; color:var(--ink); }
+    .inv-move{ display:flex; gap:10px; justify-content:center; margin-top:2px; }
+    .inv-move button{ font-family:inherit; width:26px; height:24px; cursor:pointer; line-height:1;
+        color:var(--gold); background:rgba(90,63,38,.3); border:1px solid var(--line); border-radius:2px; }
+    .inv-move button:hover{ background:var(--gold-soft); color:var(--umber); }
+    .inv-move button:disabled{ opacity:.3; cursor:default; }
+    .inv-card canvas{ border-radius:2px; box-shadow:0 6px 14px rgba(0,0,0,.6); cursor:grab; }
+    .inv-card.dragging{ opacity:.35; }
+    .inv-card.drop-target{ outline:2px dashed var(--gold); outline-offset:2px; }
+    .inv-empty{ padding:50px 22px; text-align:center; color:var(--ink-dim); font-style:italic; }
+
+    .hide{ display:none !important; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div id="webgl-container"></div>
+<div id="vignette"></div>
+
+<div id="hud">
+    <div class="hud-pill">Galerie <b id="coord">0 : 0</b></div>
+    <div class="hud-pill">Fragments <b><span id="frag-n">0</span> / <span id="frag-t">12</span></b></div>
+    <div class="hud-pill">Score <b id="score-n">0</b></div>
+    <div class="hud-pill">Seed <b id="seed">—</b></div>
+</div>
+
+<button id="btn-store" class="icon-btn" title="Boutique (B)">&#9733;</button>
+<button id="btn-menu" class="icon-btn" title="Menu (M)">&#9776;</button>
+
+<div id="panel">
+    <h2>Commandes</h2>
+    <div class="row">Avancer <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd></div>
+    <div class="row">Courir <kbd>Maj</kbd></div>
+    <div class="row">Prendre / Poser <kbd>E</kbd> &middot; <kbd>Clic</kbd></div>
+    <div class="row">Emplacement <span style="letter-spacing:0">🖱</span> Molette &middot; <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></div>
+    <div class="row">Lire le livre <kbd>R</kbd></div>
+    <div class="row">Jeter le livre <kbd>G</kbd> &middot; <kbd>Clic droit</kbd></div>
+    <div class="row">Boutique <kbd>B</kbd></div>
+    <div class="row">Menu &amp; stats <kbd>M</kbd></div>
+    <div class="row" style="color:var(--gold-soft)">But : remplir un rayon d'une seule couleur</div>
+</div>
+
+<div id="crosshair"></div>
+<div id="prompt"></div>
+
+<div id="carry"></div>
+
+<div id="store">
+    <div class="store-panel">
+        <div class="store-head"><h2>Boutique</h2><span>Score&nbsp;: <b id="store-score">0</b></span></div>
+        <div id="store-list"></div>
+        <div class="store-close"><b>B</b> / <b>&Eacute;chap</b> pour fermer</div>
+    </div>
+</div>
+
+<div id="toast"><div class="k" id="toast-k"></div><div class="t" id="toast-t"></div></div>
+
+<div id="reader">
+    <div class="book">
+        <div class="spine"></div>
+        <div class="page left">
+            <div class="title" id="t-left"></div>
+            <div class="body" id="b-left"></div>
+            <div class="num" id="n-left"></div>
+        </div>
+        <div class="page right">
+            <div class="title" id="t-right"></div>
+            <div class="body" id="b-right"></div>
+            <div class="num" id="n-right"></div>
+        </div>
+        <div class="reader-bar">
+            <span><b>&larr; &rarr;</b> Feuilleter</span>
+            <span><b>&Eacute;chap</b> Fermer</span>
+        </div>
+    </div>
+</div>
+
+<div id="touch">
+    <div id="joy"><div id="joy-stick"></div></div>
+    <div id="t-act" class="touch-btn">PRENDRE</div>
+    <div id="t-read" class="touch-btn">LIRE</div>
+    <div id="t-throw" class="touch-btn">JETER</div>
+</div>
+
+<div id="start">
+    <div class="eyebrow">Un labyrinthe de savoirs oubli&eacute;s</div>
+    <h1>La Biblioth&egrave;que<br>Infinie</h1>
+    <div class="rule"></div>
+    <p>&laquo; Quelque part dans ces galeries dort un livre qui contient tous les autres.
+       Douze fragments en dessinent le chemin. Trouve-les. &raquo;</p>
+    <div class="btn">Entrer</div>
+    <div class="hint" id="start-hint">Clique pour verrouiller la souris &nbsp;&middot;&nbsp; le son s'active en entrant</div>
+</div>
+
+<div id="pause" class="hide">
+    <div class="eyebrow">En pause</div>
+    <h2>La lecture t'attend</h2>
+    <div class="btn">Reprendre</div>
+    <div class="hint">&Eacute;chap met en pause &middot; &#9776; (en haut &agrave; droite) ouvre le menu &amp; les r&eacute;glages</div>
+</div>
+
+<div id="confirm">
+    <div class="confirm-panel">
+        <div class="eyebrow" id="confirm-eyebrow">Confirmation</div>
+        <h2 id="confirm-title"></h2>
+        <p id="confirm-msg"></p>
+        <div class="confirm-actions">
+            <button id="confirm-no" class="confirm-btn ghost">Annuler</button>
+            <button id="confirm-yes" class="confirm-btn">Confirmer</button>
+        </div>
+    </div>
+</div>
+
+<div id="menu">
+    <div class="menu-panel">
+        <div class="eyebrow">En pause &middot; Le registre du veilleur</div>
+        <h2>La lecture t'attend</h2>
+
+        <button id="menu-resume" class="menu-btn resume">Reprendre l'exploration</button>
+
+        <div class="menu-section-title">Statistiques</div>
+        <div class="stat-grid">
+            <div class="stat-cell"><div class="lab">Score</div><div class="val" id="st-score">0</div></div>
+            <div class="stat-cell"><div class="lab">Fragments</div><div class="val" id="st-frag">0 <small>/ 12</small></div></div>
+            <div class="stat-cell"><div class="lab">Rayons complétés</div><div class="val" id="st-shelves">0</div></div>
+            <div class="stat-cell"><div class="lab">Livres déplacés</div><div class="val" id="st-moved">0</div></div>
+            <div class="stat-cell"><div class="lab">Galeries explorées</div><div class="val" id="st-gal">0</div></div>
+            <div class="stat-cell"><div class="lab">Livres au sol</div><div class="val" id="st-floor">0</div></div>
+            <div class="stat-cell"><div class="lab">Améliorations</div><div class="val" id="st-upg">0</div></div>
+            <div class="stat-cell"><div class="lab">Bibliothèque (seed)</div><div class="val" id="st-seed">—</div></div>
+        </div>
+
+        <div class="menu-section-title">Rayons complétés par couleur</div>
+        <div id="color-stats" class="color-stats"></div>
+        <div id="color-pref" class="color-pref"></div>
+
+        <div class="menu-section-title">Ambiance sonore</div>
+        <div class="menu-row">
+            <div class="mr-label">Musique d'ambiance
+                <span class="mr-sub">Nappe feutrée qui respire dans les galeries</span></div>
+            <div id="tg-music" class="toggle" role="switch" aria-checked="false" tabindex="0"><div class="knob"></div></div>
+        </div>
+        <div class="vol-row">
+            <label for="rg-music">Volume</label>
+            <input type="range" id="rg-music" min="0" max="100" value="75">
+        </div>
+        <div class="menu-row">
+            <div class="mr-label">Effets sonores
+                <span class="mr-sub">Pas, pages, carillons…</span></div>
+            <div id="tg-sfx" class="toggle on" role="switch" aria-checked="true" tabindex="0"><div class="knob"></div></div>
+        </div>
+
+        <div class="menu-section-title">Partie</div>
+        <button id="menu-new" class="menu-btn danger">Nouvelle bibliothèque (nouveau seed)</button>
+
+        <div class="menu-close"><b>Échap</b> / <b>M</b> reprend l'exploration</div>
+    </div>
+</div>
+
+<script>
+"use strict";
+/* ================================================================
+   LA BIBLIOTHÈQUE INFINIE
+   ================================================================ */
+
+/* ---------- Contrôleur souris ---------- */
+class LookControls {
+    constructor(camera, dom){
+        this.camera = camera; this.dom = dom; this.isLocked = false;
+        this.euler = new THREE.Euler(0,0,0,'YXZ');
+        this.sens = 0.0022; this._listeners = {};
+        document.addEventListener('mousemove', e => { if(this.isLocked) this._apply(e.movementX||0, e.movementY||0); });
+        document.addEventListener('pointerlockchange', () => {
+            this.isLocked = (document.pointerLockElement === this.dom);
+            this._emit(this.isLocked ? 'lock' : 'unlock');
+        });
+    }
+    on(t,f){ (this._listeners[t] = this._listeners[t] || []).push(f); }
+    _emit(t){ (this._listeners[t] || []).forEach(f => f()); }
+    _apply(dx, dy){
+        this.euler.setFromQuaternion(this.camera.quaternion);
+        this.euler.y -= dx * this.sens;
+        this.euler.x -= dy * this.sens;
+        this.euler.x = Math.max(-1.45, Math.min(1.45, this.euler.x));
+        this.camera.quaternion.setFromEuler(this.euler);
+    }
+    lookBy(dx,dy){ this._apply(dx,dy); }
+    lock(){ this.dom.requestPointerLock && this.dom.requestPointerLock(); }
+    unlock(){ document.exitPointerLock && document.exitPointerLock(); }
+}
+
+/* ---------- Aléatoire déterministe ---------- */
+function mulberry32(a){
+    return function(){
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a>>>15), 1 | a);
+        t = (t + Math.imul(t ^ (t>>>7), 61 | t)) ^ t;
+        return ((t ^ (t>>>14)) >>> 0) / 4294967296;
+    };
+}
+
+/* ---------- Seed de partie & sauvegarde des modifications ---------- */
+const SAVE_PREFIX = 'bib-infinie:';
+function randSeed(){ return (Math.floor(Math.random()*0xffffffff)) >>> 0; }
+let GAME_SEED;
+try{
+    const cur = localStorage.getItem(SAVE_PREFIX+'current');
+    GAME_SEED = (cur!==null && !isNaN(parseInt(cur,10))) ? (parseInt(cur,10)>>>0) : randSeed();
+}catch(e){ GAME_SEED = randSeed(); }
+try{ localStorage.setItem(SAVE_PREFIX+'current', String(GAME_SEED)); }catch(e){}
+
+// le seed influence toute la génération : chaque seed = une bibliothèque unique
+function seedFor(x,z){ let h = (x*73856093) ^ (z*19349663) ^ GAME_SEED; return h>>>0; }
+
+// modifications persistées (delta par rapport au monde généré)
+const mods = { slots:{}, floor:[], frags:[], movedFrags:[], sealed:[], score:0, visited:[], moved:0, sealedColors:[], upgrades:{ cap:0, spd:0, reach:0, lantern:0, mult:0, sort:0 } };
+let floorIdCounter = 1;
+function saveKey(){ return SAVE_PREFIX+'save:'+GAME_SEED; }
+(function loadMods(){
+    try{
+        const raw = localStorage.getItem(saveKey());
+        if(raw){
+            const o = JSON.parse(raw);
+            mods.slots = o.slots || {}; mods.floor = o.floor || [];
+            mods.frags = o.frags || []; mods.movedFrags = o.movedFrags || [];
+            mods.sealed = o.sealed || []; mods.score = o.score || 0;
+            mods.visited = o.visited || [];
+            mods.visitedV2 = o.visitedV2 || false;
+            mods.moved = o.moved || 0;
+            mods.sealedColors = o.sealedColors || [];
+            mods.upgrades = Object.assign({ cap:0, spd:0, reach:0, lantern:0, mult:0, sort:0 }, o.upgrades || {});
+            for(const f of mods.floor) if(f.id >= floorIdCounter) floorIdCounter = f.id + 1;
+        }
+    }catch(e){}
+})();
+let saveTimer = null;
+function persist(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { try{ localStorage.setItem(saveKey(), JSON.stringify(mods)); }catch(e){} }, 300);
+}
+function newGame(){
+    const s = randSeed();
+    try{ localStorage.setItem(SAVE_PREFIX+'current', String(s)); }catch(e){}
+    location.reload();
+}
+
+/* ---------- Textures d'environnement ---------- */
+function woodTexture(){
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d');
+    x.fillStyle = '#2c1a0e'; x.fillRect(0,0,128,128);
+    for(let i=0;i<40;i++){ x.fillStyle = 'rgba(15,8,3,'+(0.06+Math.random()*0.14)+')';
+        x.fillRect(Math.random()*128,0,Math.random()*3+1,128); }
+    for(let i=0;i<8;i++){ x.fillStyle = 'rgba(70,45,22,0.18)';
+        x.fillRect(0,Math.random()*128,128,Math.random()*2+1); }
+    return new THREE.CanvasTexture(c);
+}
+function carpetTexture(){
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d');
+    x.fillStyle = '#3a1414'; x.fillRect(0,0,128,128);
+    for(let i=0;i<128;i+=16) for(let j=0;j<128;j+=16){
+        if((i+j)%32===0){ x.fillStyle='#2a0d0d'; x.fillRect(i,j,16,16); } }
+    x.strokeStyle = 'rgba(120,70,40,0.25)'; x.lineWidth = 1;
+    for(let i=8;i<128;i+=16){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,128); x.stroke(); }
+    return new THREE.CanvasTexture(c);
+}
+function ceilingTexture(){
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d');
+    x.fillStyle = '#140c08'; x.fillRect(0,0,128,128);
+    x.strokeStyle = 'rgba(40,26,15,0.7)'; x.lineWidth = 4; x.strokeRect(6,6,116,116);
+    return new THREE.CanvasTexture(c);
+}
+
+/* ---------- Titres procéduraux ---------- */
+const T_FORMS = ["Trait\u00e9 de","Le Livre des","De la","Concordance des","Vera Historia","Speculum des","Fragments du","Commentaire sur","Index des","Le Codex des","Somme des","Miroir des"];
+const T_NOUNS = ["Miroirs","Silences","Portes closes","Cendres","Nombres vains","Songes","Marges","Cartes br\u00fbl\u00e9es","\u00c9chos","Ombres droites","Vents secs","Noms perdus","Heures creuses","Sels","Racines","Clefs muettes","Ruines","Lunes basses"];
+function bookTitle(rng){
+    return T_FORMS[Math.floor(rng()*T_FORMS.length)] + " " + T_NOUNS[Math.floor(rng()*T_NOUNS.length)];
+}
+
+/* ---------- « Langue inconnue » pour les pages ---------- */
+const GLYPHS = 'abcdefghijklmnopqrstuvwxyz';
+function pageText(rng, words){
+    let out = '', sentence = 0;
+    for(let w=0; w<words; w++){
+        const len = 1 + Math.floor(rng()*8);
+        let word = '';
+        for(let i=0;i<len;i++) word += GLYPHS[Math.floor(rng()*26)];
+        if(sentence===0) word = word[0].toUpperCase()+word.slice(1);
+        out += word; sentence++;
+        const r = rng();
+        if(r<0.06 && sentence>3){ out += '. '; sentence = 0; }
+        else if(r<0.12){ out += ', '; }
+        else out += ' ';
+    }
+    return out.trim() + '.';
+}
+
+/* ---------- Constantes du monde ---------- */
+const ROOM = 13, WALL_H = 5, DOOR = 3.7, D = 0.5, EYE = 1.65;
+const RENDER_DIST = 1, PLAYER_R = 0.38;
+const ROW_Y = [0.5, 1.7, 2.9];          // hauteur des planches
+const BOOK_H = 0.32, BOOK_W = 0.13, BOOK_DEPTH = 0.28;
+const SLOT_DX = 0.175;                    // espacement des livres
+
+/* ---------- Fragments (contenu original) ---------- */
+const FRAGMENTS = [
+    "Ici commence un couloir qui ne finit jamais.",
+    "Chaque page est une porte, chaque porte une page.",
+    "Le lecteur cherche un livre ; le livre cherche un lecteur.",
+    "Toute histoire est vraie dans une salle au moins.",
+    "L'oubli est la seule biblioth\u00e8que vraiment compl\u00e8te.",
+    "Marche assez longtemps et tu liras ton propre nom.",
+    "Le silence, ici, est fait de mille voix pli\u00e9es.",
+    "Un seul livre les contient tous, mais nul ne l'a trouv\u00e9.",
+    "La poussi\u00e8re est l'encre patiente des si\u00e8cles.",
+    "Ce que tu cherches se tient d\u00e9j\u00e0 derri\u00e8re toi.",
+    "Les murs sont des r\u00e9ponses \u00e0 des questions perdues.",
+    "Referme ce livre : la salle t'attend ailleurs."
+];
+const FRAG_TOTAL = FRAGMENTS.length;
+const discovered = new Set(mods.frags);   // fragments déjà trouvés (restaurés de la sauvegarde)
+// migration : l'ancienne version comptait toutes les galeries chargées (grille 3x3),
+// et non seulement celles où le joueur entrait. On repart sur un compteur propre.
+if(!mods.visitedV2){ mods.visited = []; mods.visitedV2 = true; }
+const visitedGalleries = new Set(mods.visited);   // galeries réellement traversées (statistique)
+
+/* ================================================================
+   SCÈNE
+   ================================================================ */
+const container = document.getElementById('webgl-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+// brouillard NOIR et dense : oppressant, dissipé peu à peu par la lanterne (boutique)
+const FOG_BASE = 0.115;
+scene.fog = new THREE.FogExp2(0x000000, FOG_BASE);
+function applyFog(){
+    const d = FOG_BASE - (( (typeof lanternLvl!=='undefined' ? lanternLvl : (mods.upgrades.lantern||0)) )*0.02);
+    scene.fog.density = Math.max(0.035, d);
+}
+
+const camera = new THREE.PerspectiveCamera(66, innerWidth/innerHeight, 0.1, 1000);
+camera.position.set(0, EYE, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:"high-performance" });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+container.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffdca8, 0.5));
+scene.add(new THREE.HemisphereLight(0xffd9a0, 0x1a0e06, 0.32));
+
+/* ---------- Matériaux d'environnement ---------- */
+const texWood = woodTexture();  texWood.wrapS = texWood.wrapT = THREE.RepeatWrapping; texWood.repeat.set(2,2);
+const texCarpet = carpetTexture(); texCarpet.wrapS = texCarpet.wrapT = THREE.RepeatWrapping; texCarpet.repeat.set(4,4);
+const texCeil = ceilingTexture(); texCeil.wrapS = texCeil.wrapT = THREE.RepeatWrapping; texCeil.repeat.set(3,3);
+
+const matWood  = new THREE.MeshLambertMaterial({ map:texWood });
+const matDark  = new THREE.MeshLambertMaterial({ color:0x1a0f08 });
+const matFloor = new THREE.MeshLambertMaterial({ map:texCarpet });
+const matCeil  = new THREE.MeshLambertMaterial({ map:texCeil });
+const matLamp  = new THREE.MeshBasicMaterial({ color:0xffd084 });
+
+/* ---------- Pool de tranches de livres (dos lisibles) ---------- */
+// 6 couleurs franches et bien distinctes, chacune avec une couleur de texte lisible
+const PALETTE = [
+    { name:'Rouge',  leather:'#c0392b', ink:'#ffe3cf' },
+    { name:'Orange', leather:'#d3781a', ink:'#fff2da' },
+    { name:'Jaune',  leather:'#d9b312', ink:'#3a2a02' },
+    { name:'Vert',   leather:'#2f9e57', ink:'#eafff1' },
+    { name:'Bleu',   leather:'#2f6fbf', ink:'#e8f1ff' },
+    { name:'Violet', leather:'#8244b0', ink:'#f7e8ff' }
+];
+const bookMaterials = [];   // { mats, matsFlat, mat, title, spec, ci, sx }
+
+/* ---------- Outils de rendu des reliures ---------- */
+function _cv(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+function _tex(c){ const t=new THREE.CanvasTexture(c); t.anisotropy=8; return t; }
+function _shade(hex, f){   // f<1 assombrit, f>1 éclaircit ; renvoie 'rgb(...)'
+    const n = parseInt(hex.slice(1),16);
+    let r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+    r=Math.min(255,Math.max(0,Math.round(r*f)));
+    g=Math.min(255,Math.max(0,Math.round(g*f)));
+    b=Math.min(255,Math.max(0,Math.round(b*f)));
+    return 'rgb('+r+','+g+','+b+')';
+}
+// grain de cuir : petites taches sombres/claires semi-transparentes
+function _leatherGrain(x, W, H, seed){
+    const rng = mulberry32(seed>>>0);
+    for(let i=0;i<Math.round(W*H*0.05);i++){
+        const px=rng()*W, py=rng()*H, r=0.4+rng()*1.1, a=(rng()*0.10);
+        x.fillStyle = rng()<0.5 ? 'rgba(0,0,0,'+a+')' : 'rgba(255,235,200,'+(a*0.7)+')';
+        x.beginPath(); x.arc(px,py,r,0,6.283); x.fill();
+    }
+}
+
+// TRANCHE (dos) : cuir, nerfs en relief, pièce de titre, titre doré, fleuron
+function paintSpine(canvas, spec){
+    const W = canvas.width, H = canvas.height, sx = W/48, sy = H/172;
+    const x = canvas.getContext('2d');
+    x.clearRect(0,0,W,H);
+    // fond cuir + léger dégradé vertical (haut plus clair)
+    x.fillStyle = spec.leather; x.fillRect(0,0,W,H);
+    let vg = x.createLinearGradient(0,0,0,H);
+    vg.addColorStop(0,'rgba(255,240,210,.06)'); vg.addColorStop(.5,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.14)');
+    x.fillStyle=vg; x.fillRect(0,0,W,H);
+    _leatherGrain(x,W,H, (spec.title.length*2654435761)>>>0);
+    // arrondi du dos : ombres sur les bords gauche/droit + reflet central
+    const hg = x.createLinearGradient(0,0,W,0);
+    hg.addColorStop(0,'rgba(0,0,0,.55)'); hg.addColorStop(.12,'rgba(0,0,0,.05)');
+    hg.addColorStop(.4,'rgba(255,240,215,.10)'); hg.addColorStop(.6,'rgba(255,240,215,.10)');
+    hg.addColorStop(.88,'rgba(0,0,0,.05)'); hg.addColorStop(1,'rgba(0,0,0,.6)');
+    x.fillStyle=hg; x.fillRect(0,0,W,H);
+    // deux nerfs encadrant la zone de titre (haut / bas)
+    const bands = [24, 150];
+    for(const by of bands){
+        x.fillStyle='rgba(0,0,0,.35)';           x.fillRect(2*sx,(by-2)*sy,44*sx,4*sy);
+        x.fillStyle='rgba(255,238,208,.18)';     x.fillRect(2*sx,(by-2)*sy,44*sx,1*sy);
+        x.fillStyle='rgba(0,0,0,.28)';           x.fillRect(2*sx,(by+2)*sy,44*sx,1*sy);
+    }
+    // filets dorés
+    x.fillStyle = spec.gold;
+    x.fillRect(4*sx,18*sy,40*sx,1.4*sy); x.fillRect(4*sx,156*sy,40*sx,1.4*sy);
+    // pièce de titre : grand panneau vertical (cuir plus sombre + filet doré)
+    const py0=32, py1=142;
+    x.fillStyle = _shade(spec.leather, 0.62);
+    x.fillRect(7*sx, py0*sy, 34*sx, (py1-py0)*sy);
+    x.strokeStyle = spec.gold; x.globalAlpha=.85; x.lineWidth = Math.max(1, 1.2*sy);
+    x.strokeRect(7*sx, py0*sy, 34*sx, (py1-py0)*sy); x.globalAlpha=1;
+    // titre doré courant verticalement le long du dos (lecture tête inclinée)
+    x.save();
+    x.translate(W/2, (py0+py1)/2*sy); x.rotate(-Math.PI/2);
+    x.fillStyle = spec.gold; x.textAlign='center'; x.textBaseline='middle';
+    let t = spec.title; if(t.length>20) t = t.slice(0,19)+'\u2026';
+    x.font = '600 '+(14*sy)+'px Georgia, "Times New Roman", serif';
+    x.shadowColor='rgba(0,0,0,.65)'; x.shadowBlur=3; x.shadowOffsetY=1;
+    x.fillText(t, 0, 0, (py1-py0-8)*sy);   // maxWidth = hauteur utile du panneau
+    x.restore();
+    // fleuron doré en pied
+    x.fillStyle = spec.gold; x.globalAlpha=.9;
+    x.beginPath(); x.arc(W/2,164*sy,2.6*sy,0,6.283); x.fill();
+    x.globalAlpha=.5; x.fillRect(16*sx,164*sy,16*sx,1*sy); x.globalAlpha=1;
+}
+function makeSpineTexture(spec){ const c=_cv(96,320); paintSpine(c,spec); return _tex(c); }
+
+// PLAT DE COUVERTURE : cuir un peu plus sombre, encadrement gaufré, fleuron central
+function paintCover(canvas, spec){
+    const W=canvas.width, H=canvas.height, x=canvas.getContext('2d');
+    x.fillStyle=_shade(spec.leather,0.9); x.fillRect(0,0,W,H);
+    _leatherGrain(x,W,H,(spec.title.length*40503+7)>>>0);
+    // vignette : bords assombris pour le volume
+    const rg=x.createRadialGradient(W/2,H/2,Math.min(W,H)*0.2,W/2,H/2,Math.max(W,H)*0.7);
+    rg.addColorStop(0,'rgba(255,240,215,.05)'); rg.addColorStop(1,'rgba(0,0,0,.4)');
+    x.fillStyle=rg; x.fillRect(0,0,W,H);
+    // ombre marquée côté charnière (bord gauche = dos)
+    const cg=x.createLinearGradient(0,0,W*0.18,0);
+    cg.addColorStop(0,'rgba(0,0,0,.5)'); cg.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=cg; x.fillRect(0,0,W*0.18,H);
+    // double encadrement gaufré (filet clair + ombre) façon estampage doré discret
+    const mx=W*0.14, my=H*0.1;
+    function frame(inset){
+        x.strokeStyle='rgba(0,0,0,.35)'; x.lineWidth=2;
+        x.strokeRect(mx+inset+1, my+inset+1, W-2*(mx+inset), H-2*(my+inset));
+        x.strokeStyle=spec.gold; x.globalAlpha=.55; x.lineWidth=1.4;
+        x.strokeRect(mx+inset, my+inset, W-2*(mx+inset), H-2*(my+inset));
+        x.globalAlpha=1;
+    }
+    frame(0); frame(W*0.05);
+    // petit fleuron losange doré au centre
+    x.save(); x.translate(W/2,H/2); x.rotate(Math.PI/4);
+    x.strokeStyle=spec.gold; x.globalAlpha=.5; x.lineWidth=1.4;
+    const s=Math.min(W,H)*0.09; x.strokeRect(-s,-s,2*s,2*s); x.globalAlpha=1; x.restore();
+}
+function makeCoverTexture(spec){ const c=_cv(150,168); paintCover(c,spec); return _tex(c); }
+
+// TRANCHES DE PAGES (gouttière, tête, queue) : papier crème strié
+const pageTex = (function(){
+    const c=_cv(128,128), x=c.getContext('2d'), W=128, H=128;
+    // dégradé crème -> ivoire
+    const bg=x.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0,'#efe7d2'); bg.addColorStop(1,'#ddd0b2');
+    x.fillStyle=bg; x.fillRect(0,0,W,H);
+    // fines lignes verticales = tranches de feuillets empilés
+    const rng=mulberry32(1337);
+    for(let px=0; px<W; px+=1){
+        const a = 0.05 + rng()*0.14;
+        x.strokeStyle='rgba(120,100,70,'+a+')';
+        x.lineWidth=1; x.beginPath(); x.moveTo(px+0.5,0); x.lineTo(px+0.5,H); x.stroke();
+    }
+    // quelques feuillets plus marqués + ombres tête/pied
+    for(let k=0;k<10;k++){ const px=Math.floor(rng()*W); x.strokeStyle='rgba(90,70,45,.22)'; x.beginPath(); x.moveTo(px+0.5,0); x.lineTo(px+0.5,H); x.stroke(); }
+    const sh=x.createLinearGradient(0,0,0,H);
+    sh.addColorStop(0,'rgba(0,0,0,.22)'); sh.addColorStop(.12,'rgba(0,0,0,0)');
+    sh.addColorStop(.88,'rgba(0,0,0,0)'); sh.addColorStop(1,'rgba(0,0,0,.22)');
+    x.fillStyle=sh; x.fillRect(0,0,W,H);
+    return _tex(c);
+})();
+const pageMat = new THREE.MeshLambertMaterial({ map:pageTex });
+
+(function buildBookPool(){
+    const rng = mulberry32((GAME_SEED ^ 0x9e3779b9) >>> 0);
+    for(let i=0;i<56;i++){
+        const ci = Math.floor(rng()*PALETTE.length);
+        const c = PALETTE[ci];
+        const spec = { leather:c.leather, gold:c.ink, title:bookTitle(rng), ci:ci };
+        const spineMat = new THREE.MeshLambertMaterial({ map:makeSpineTexture(spec) });
+        const coverMat = new THREE.MeshLambertMaterial({ map:makeCoverTexture(spec) });
+        // ordre des faces d'une BoxGeometry : +X, -X, +Y, -Y, +Z, -Z
+        // livre debout (dos = +Z) : plats sur X, tête/queue + gouttière = pages, dos = tranche
+        const mats     = [coverMat, coverMat, pageMat, pageMat, spineMat, pageMat];
+        // livre couché (couverture sur le dessus +Y)
+        const matsFlat = [pageMat, pageMat, coverMat, coverMat, spineMat, pageMat];
+        bookMaterials.push({ mats, matsFlat, mat:spineMat, title:spec.title, spec:spec, ci:ci });
+    }
+})();
+
+// tranche dorée pour les tomes-fragments
+const fragTitle = "Le Livre des Fragments";
+const fragSpec = { leather:'#5a3a12', gold:'#ffe6a0', title:fragTitle };
+const fragSpineTex = makeSpineTexture(fragSpec);
+
+const bookGeo = new THREE.BoxGeometry(BOOK_W, BOOK_H, BOOK_DEPTH); // dos = face +Z
+const flatGeo = new THREE.BoxGeometry(0.3, 0.07, 0.4);            // livre couché
+
+/* ---------- (dé)sérialisation des livres pour la sauvegarde ---------- */
+let bookCounter = 0;
+function bookDesc(b){                            // description minimale d'un livre
+    return { mi: (b.userData.matIndex!=null ? b.userData.matIndex : null),
+             frag: (b.userData.special!=null ? b.userData.special : null) };
+}
+function makeBookFromDesc(desc){                 // recrée un livre depuis sa description
+    let b;
+    if(desc.frag!=null){
+        const mat = new THREE.MeshLambertMaterial({ map:fragSpineTex, emissive:0xd9a441,
+            emissiveIntensity: discovered.has(desc.frag) ? 0.12 : 0.85 });
+        b = new THREE.Mesh(bookGeo, mat);
+        b.userData = { isBook:true, title:fragTitle, slot:null, special:desc.frag, uid:++bookCounter, spineSpec:fragSpec, matIndex:null };
+    } else {
+        const pick = bookMaterials[desc.mi] || bookMaterials[0];
+        b = new THREE.Mesh(bookGeo, pick.mats);
+        b.userData = { isBook:true, title:pick.title, slot:null, uid:++bookCounter, spineSpec:pick.spec, matIndex:(bookMaterials[desc.mi]?desc.mi:0), mats:pick.mats, matsFlat:pick.matsFlat };
+    }
+    return b;
+}
+function removeBookFromWorld(b){                  // détache un livre de la scène et des listes
+    if(b.parent) b.parent.remove(b);
+    let i = interactiveBooks.indexOf(b); if(i>-1) interactiveBooks.splice(i,1);
+    const s = b.userData.slot;
+    if(s && s.gallery){ const j = s.gallery.books.indexOf(b); if(j>-1) s.gallery.books.splice(j,1); }
+}
+
+/* ---------- Poussière ---------- */
+let dust;
+(function(){
+    const N = 550, pos = new Float32Array(N*3);
+    for(let i=0;i<N;i++){ pos[i*3]=(Math.random()-0.5)*40; pos[i*3+1]=Math.random()*WALL_H; pos[i*3+2]=(Math.random()-0.5)*40; }
+    const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    const mm = new THREE.PointsMaterial({ color:0xd9b98a, size:0.03, transparent:true, opacity:0.5, depthWrite:false });
+    dust = new THREE.Points(gg, mm); scene.add(dust);
+})();
+
+/* ================================================================
+   GALERIE
+   ================================================================ */
+const controls = new LookControls(camera, document.body);
+const raycaster = new THREE.Raycaster();
+const centerVec = new THREE.Vector2(0,0);
+const FLOOR_PLANE = new THREE.Plane(new THREE.Vector3(0,1,0), 0);   // sol : plan y = 0
+
+let interactiveBooks = [];
+let activeColliders = [];
+let activeSlots = [];
+let activeOccluders = [];
+const activeChunks = new Map();
+
+/* ---------- Surbrillance de visée (livre ciblé / emplacement vide) ---------- */
+const HL_COLORS = {
+    pick:    0xffd27a,   // livre à prendre / fragment à recueillir : or chaud
+    blocked: 0xd0603f,   // mains pleines : rouge sourd
+    slot:    0x74e0a0    // emplacement vide où ranger : vert « valide »
+};
+const highlight = (function(){
+    const g = new THREE.Group();
+    g.visible = false;
+    const unit = new THREE.BoxGeometry(1,1,1);
+    // volume translucide (occulté normalement par la scène)
+    const fillMat = new THREE.MeshBasicMaterial({ transparent:true, opacity:0.16, depthWrite:false });
+    const fill = new THREE.Mesh(unit, fillMat);
+    fill.renderOrder = 998;
+    // contour toujours visible, même à travers le bois, pour bien repérer la cible
+    const edgesMat = new THREE.LineBasicMaterial({ transparent:true, opacity:0.95, depthTest:false });
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(unit), edgesMat);
+    edges.renderOrder = 999;
+    g.add(fill); g.add(edges);
+    scene.add(g);
+    return { group:g, fillMat, edgesMat };
+})();
+const _hlPos = new THREE.Vector3(), _hlQuat = new THREE.Quaternion(), _hlScl = new THREE.Vector3();
+function setHighlightColor(hex){
+    highlight.fillMat.color.setHex(hex);
+    highlight.edgesMat.color.setHex(hex);
+}
+function updateHighlight(){
+    // n'afficher la surbrillance que pendant le jeu actif
+    if(!(active() && !isReading && !storeOpen && !menuOpen)){ highlight.group.visible = false; return; }
+
+    const g = highlight.group;
+    const m = 0.035;   // marge : le contour déborde légèrement de l'objet visé
+    const pulse = 0.78 + 0.22*Math.sin(performance.now()*0.006);   // battement doux
+
+    if((placeMode === 'pick' || placeMode === 'pickblocked') && hovered && hlBookOn){
+        // épouse le livre visé (debout ou couché), en repère monde
+        hovered.updateWorldMatrix(true, false);
+        hovered.matrixWorld.decompose(_hlPos, _hlQuat, _hlScl);
+        const p = hovered.geometry.parameters || {};
+        g.position.copy(_hlPos);
+        g.quaternion.copy(_hlQuat);
+        g.scale.set((p.width||BOOK_W)*_hlScl.x + m, (p.height||BOOK_H)*_hlScl.y + m, (p.depth||BOOK_DEPTH)*_hlScl.z + m);
+        setHighlightColor(placeMode === 'pickblocked' ? HL_COLORS.blocked : HL_COLORS.pick);
+        highlight.fillMat.opacity = (placeMode === 'pickblocked' ? 0.10 : 0.16);
+        highlight.edgesMat.opacity = 0.60 + 0.35*pulse;
+        g.visible = true;
+    } else if(placeMode === 'slot' && targetSlot && hlSlotOn){
+        // matérialise l'emplacement d'étagère vide où le livre ira se ranger
+        g.position.set(targetSlot.wx, targetSlot.wy, targetSlot.wz);
+        g.quaternion.setFromEuler(new THREE.Euler(0, targetSlot.rotY || 0, 0));
+        g.scale.set(BOOK_W + m, BOOK_H + m, BOOK_DEPTH + m);
+        setHighlightColor(HL_COLORS.slot);
+        highlight.fillMat.opacity = 0.12 + 0.10*pulse;
+        highlight.edgesMat.opacity = 0.60 + 0.35*pulse;
+        g.visible = true;
+    } else {
+        g.visible = false;
+    }
+}
+
+// paramètres de côté : axis = mur perpendiculaire, sign = position, rotY = rotation du dos vers la salle
+const SIDES = {
+    N: { axis:'z', sign: 1, along:'x', rotY: Math.PI },
+    S: { axis:'z', sign:-1, along:'x', rotY: 0 },
+    E: { axis:'x', sign: 1, along:'z', rotY:-Math.PI/2 },
+    W: { axis:'x', sign:-1, along:'z', rotY: Math.PI/2 }
+};
+
+class Gallery {
+    constructor(cx, cz){
+        this.cx = cx; this.cz = cz; this.key = cx+','+cz;
+        this.group = new THREE.Group();
+        this.group.position.set(cx*ROOM, 0, cz*ROOM);
+        this.colliders = []; this.slots = []; this.books = []; this.geos = []; this.occluders = []; this.rows = [];
+        this.rng = mulberry32(seedFor(cx,cz));
+        this.build();
+        scene.add(this.group);
+    }
+
+    // conversion (le long du mur, profondeur) -> local (x,z)
+    toLocal(side, alongPos, depthCoord){
+        return side.axis === 'z'
+            ? { x: alongPos, z: depthCoord }
+            : { x: depthCoord, z: alongPos };
+    }
+
+    build(){
+        const g = this.group, rng = this.rng;
+
+        const plane = new THREE.PlaneGeometry(ROOM, ROOM);
+        const floor = new THREE.Mesh(plane, matFloor); floor.rotation.x = -Math.PI/2; g.add(floor);
+        const ceil = new THREE.Mesh(plane, matCeil); ceil.position.y = WALL_H; ceil.rotation.x = Math.PI/2; g.add(ceil);
+
+        // lampe suspendue
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16,10,8), matLamp);
+        lamp.position.set(0, WALL_H-0.6, 0); g.add(lamp);
+        const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.01,0.01,0.6,4), matDark);
+        cord.position.set(0, WALL_H-0.3, 0); g.add(cord); this.geos.push(cord.geometry);
+        const light = new THREE.PointLight(0xffca85, 1.7, 16, 1.6);
+        light.position.set(0, WALL_H-0.6, 0); g.add(light);
+        this.light = light; this.lampBase = 1.7; this.flick = rng()*10;
+
+        // poteaux d'angle (comblent les coins, cadrent les portes)
+        const postGeo = new THREE.BoxGeometry(D, WALL_H, D); this.geos.push(postGeo);
+        for(const sx of [-1,1]) for(const sz of [-1,1]){
+            const post = new THREE.Mesh(postGeo, matWood);
+            post.position.set(sx*(ROOM/2 - D/2), WALL_H/2, sz*(ROOM/2 - D/2)); g.add(post); this.occluders.push(post);
+            const wx = this.cx*ROOM + post.position.x, wz = this.cz*ROOM + post.position.z;
+            this.colliders.push({ minX:wx-D/2, maxX:wx+D/2, minZ:wz-D/2, maxZ:wz+D/2 });
+        }
+
+        // quatre murs
+        for(const k of ['N','S','E','W']) this.buildWall(SIDES[k], rng);
+
+        // élément central (jamais dans la galerie de départ, pour ne pas bloquer le spawn)
+        const feat = rng();
+        if(!(this.cx===0 && this.cz===0)){
+            if(feat < 0.34) this.buildTable(rng);
+            else if(feat < 0.58) this.buildIsland(rng);
+        }
+
+        // tome-fragment
+        if(rng() < 0.42){
+            const idx = seedFor(this.cx, this.cz) % FRAG_TOTAL;
+            this.buildFragment(idx, rng);
+        }
+
+        this.applyMods();   // rejoue les modifications sauvegardées pour cette galerie
+        for(const row of this.rows) if(mods.sealed.indexOf(row.id) >= 0) sealRow(row, false);
+    }
+
+    buildWall(side, rng){
+        const s = side.sign;
+        const segLen = (ROOM/2 - D) - DOOR/2;                 // laisse un coin libre
+        const segCenter = DOOR/2 + segLen/2;
+        const backDepth = s * (ROOM/2 - 0.03);
+        const shelfDepth = s * (ROOM/2 - D/2);
+        const bookDepthC = s * (ROOM/2 - D + 0.06 + BOOK_DEPTH/2);
+
+        for(const dir of [-1, 1]){
+            const alongC = dir * segCenter;
+
+            // dos de la bibliothèque (panneau plein)
+            const back = this.mkBox(side, alongC, WALL_H/2, backDepth, segLen, WALL_H, 0.06, matDark);
+            this.group.add(back);
+            // montants latéraux
+            for(const e of [-1,1]){
+                const post = this.mkBox(side, alongC + e*segLen/2, WALL_H/2, shelfDepth, 0.06, WALL_H, D, matWood);
+                this.group.add(post);
+            }
+            // planches horizontales + rangées de livres
+            for(let r=0;r<ROW_Y.length;r++){
+                const plank = this.mkBox(side, alongC, ROW_Y[r], shelfDepth, segLen, 0.05, D-0.04, matWood);
+                this.group.add(plank);
+                this.addRow(side, alongC, segLen, ROW_Y[r] + 0.025 + BOOK_H/2, bookDepthC, rng);
+            }
+            // planche de couronnement
+            const cap = this.mkBox(side, alongC, ROW_Y[ROW_Y.length-1]+1.05, shelfDepth, segLen, 0.05, D-0.04, matWood);
+            this.group.add(cap);
+
+            // collision : empreinte de la bibliothèque
+            const c1 = this.toLocal(side, alongC - segLen/2, shelfDepth - D/2*s);
+            const c2 = this.toLocal(side, alongC + segLen/2, shelfDepth + D/2*s);
+            const wx1 = this.cx*ROOM + Math.min(c1.x,c2.x), wx2 = this.cx*ROOM + Math.max(c1.x,c2.x);
+            const wz1 = this.cz*ROOM + Math.min(c1.z,c2.z), wz2 = this.cz*ROOM + Math.max(c1.z,c2.z);
+            this.colliders.push({ minX:wx1, maxX:wx2, minZ:wz1, maxZ:wz2 });
+        }
+    }
+
+    // crée une boîte orientée selon le côté (dims données en repère mur : le long / vertical / profondeur)
+    mkBox(side, alongC, y, depthC, lenAlong, h, lenDepth, mat){
+        const sx = side.axis === 'z' ? lenAlong : lenDepth;
+        const sz = side.axis === 'z' ? lenDepth : lenAlong;
+        const geo = new THREE.BoxGeometry(sx, h, sz); this.geos.push(geo);
+        const m = new THREE.Mesh(geo, mat);
+        const p = this.toLocal(side, alongC, depthC);
+        m.position.set(p.x, y, p.z);
+        this.occluders.push(m);
+        return m;
+    }
+
+    addRow(side, alongC, segLen, bookY, bookDepthC, rng){
+        const n = Math.floor((segLen - 0.1) / SLOT_DX);
+        const start = alongC - (n-1)*SLOT_DX/2;
+        const row = { id: this.key + '#r' + this.rows.length, gallery:this, side:side,
+                      alongC:alongC, segLen:segLen, bookY:bookY, bookDepthC:bookDepthC,
+                      slots:[], sealed:false, plank:null };
+        this.rows.push(row);
+        for(let i=0;i<n;i++){
+            const alongPos = start + i*SLOT_DX;
+            const p = this.toLocal(side, alongPos, bookDepthC);
+            const slot = {
+                gallery: this, gx: this.group, id: this.key + '#' + this.slots.length, row: row,
+                lx: p.x, ly: bookY, lz: p.z, rotY: side.rotY,
+                wx: this.group.position.x + p.x, wy: bookY, wz: this.group.position.z + p.z,
+                occupied: false, book: null
+            };
+            this.slots.push(slot); row.slots.push(slot);
+            if(rng() < 0.86){                 // ~14% d'emplacements vides
+                const k = Math.floor(rng()*bookMaterials.length);
+                const pick = bookMaterials[k];
+                const book = new THREE.Mesh(bookGeo, pick.mats);
+                book.position.set(p.x, bookY, p.z);
+                book.rotation.y = side.rotY;
+                book.userData = { isBook:true, title:pick.title, slot:slot, uid:++bookCounter, spineSpec:pick.spec, matIndex:k, mats:pick.mats, matsFlat:pick.matsFlat };
+                slot.occupied = true; slot.book = book;
+                this.group.add(book); this.books.push(book); interactiveBooks.push(book);
+            }
+        }
+    }
+
+    // livres couchés sur une surface (table / îlot)
+    layBooks(cx, y, cz, count, rng){
+        for(let i=0;i<count;i++){
+            const k = Math.floor(rng()*bookMaterials.length);
+            const pick = bookMaterials[k];
+            const b = new THREE.Mesh(flatGeo, pick.matsFlat);
+            b.position.set(cx + (rng()-0.5)*1.6, y + 0.035 + i*0.001, cz + (rng()-0.5)*0.7);
+            b.rotation.y = rng()*Math.PI;
+            b.userData = { isBook:true, title:pick.title, slot:null, uid:++bookCounter, spineSpec:pick.spec, matIndex:k, mats:pick.mats, matsFlat:pick.matsFlat };
+            this.group.add(b); this.books.push(b); interactiveBooks.push(b);
+        }
+    }
+
+    buildTable(rng){
+        const top = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 1.3), matWood);
+        top.position.set(0, 0.9, 0); this.group.add(top); this.geos.push(top.geometry); this.occluders.push(top);
+        const legGeo = new THREE.BoxGeometry(0.12,0.9,0.12); this.geos.push(legGeo);
+        for(const [dx,dz] of [[-1.15,-0.5],[1.15,-0.5],[-1.15,0.5],[1.15,0.5]]){
+            const leg = new THREE.Mesh(legGeo, matWood); leg.position.set(dx,0.45,dz); this.group.add(leg); this.occluders.push(leg);
+        }
+        const shade = new THREE.Mesh(new THREE.ConeGeometry(0.18,0.22,8), matLamp);
+        shade.position.set(0.8,1.2,0); this.group.add(shade); this.geos.push(shade.geometry);
+        const glow = new THREE.PointLight(0xffb060, 0.7, 4); glow.position.set(0.8,1.15,0); this.group.add(glow);
+        this.layBooks(-0.4, 0.96, 0, 3, rng);
+        const wx=this.cx*ROOM, wz=this.cz*ROOM;
+        this.colliders.push({ minX:wx-1.4, maxX:wx+1.4, minZ:wz-0.75, maxZ:wz+0.75 });
+    }
+
+    buildIsland(rng){
+        const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.0, 1.6), matWood);
+        body.position.set(0,1.0,0); this.group.add(body); this.geos.push(body.geometry); this.occluders.push(body);
+        this.layBooks(0, 2.0, 0, 6, rng);
+        const wx=this.cx*ROOM, wz=this.cz*ROOM;
+        this.colliders.push({ minX:wx-1.3, maxX:wx+1.3, minZ:wz-0.9, maxZ:wz+0.9 });
+    }
+
+    buildFragment(idx, rng){
+        const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.34,1.1,10), matWood);
+        const spots = [[-ROOM/2+1.3,-ROOM/2+1.3],[ROOM/2-1.3,-ROOM/2+1.3],[-ROOM/2+1.3,ROOM/2-1.3],[ROOM/2-1.3,ROOM/2-1.3]];
+        const sp = spots[Math.floor(rng()*spots.length)];
+        ped.position.set(sp[0], 0.55, sp[1]); this.group.add(ped); this.geos.push(ped.geometry); this.occluders.push(ped);
+
+        const mat = new THREE.MeshLambertMaterial({ map:fragSpineTex, emissive:0xd9a441,
+            emissiveIntensity: discovered.has(idx) ? 0.12 : 0.85 });
+        const tome = new THREE.Mesh(bookGeo, mat);
+        tome.position.set(sp[0], 1.28, sp[1]);
+        // dos face au centre de la salle
+        tome.rotation.y = Math.atan2(-sp[0], -sp[1]);
+        tome.userData = { isBook:true, title:fragTitle, slot:null, special:idx, uid:++bookCounter, spineSpec:fragSpec, matIndex:null, onPedestal:true };
+        this.group.add(tome); this.books.push(tome); interactiveBooks.push(tome);
+        this.fragMat = mat; this.fragTome = tome;
+
+        const halo = new THREE.PointLight(0xffcf6b, 1.4, 5); halo.position.set(sp[0],1.36,sp[1]); this.group.add(halo);
+    }
+
+    // applique les modifications sauvegardées à cette galerie (emplacements + fragment déplacé)
+    applyMods(){
+        for(const s of this.slots){
+            if(!(s.id in mods.slots)) continue;
+            const desc = mods.slots[s.id];
+            if(s.book){ removeBookFromWorld(s.book); s.book = null; s.occupied = false; }
+            if(desc){
+                const b = makeBookFromDesc(desc);
+                b.position.set(s.lx, s.ly, s.lz); b.rotation.set(0, s.rotY, 0);
+                b.userData.slot = s; s.book = b; s.occupied = true;
+                this.group.add(b); this.books.push(b); interactiveBooks.push(b);
+            }
+        }
+        // tome-fragment déplacé ailleurs : ne pas le laisser réapparaître sur le piédestal
+        if(this.fragTome && mods.movedFrags.indexOf(this.fragTome.userData.special) >= 0){
+            removeBookFromWorld(this.fragTome);
+            const j = this.books.indexOf(this.fragTome); if(j>-1) this.books.splice(j,1);
+            this.fragTome = null;
+        }
+    }
+
+    destroy(){
+        // ne récupérer que les livres encore rangés dans CETTE galerie
+        for(const b of this.books){
+            if(b.parent === this.group){
+                const i = interactiveBooks.indexOf(b); if(i>-1) interactiveBooks.splice(i,1);
+            }
+        }
+        for(const g of this.geos){ if(g.dispose) g.dispose(); }
+        if(this.fragMat && this.fragTome && this.fragTome.parent === this.group) this.fragMat.dispose();
+        scene.remove(this.group);
+    }
+}
+
+/* ---------- Confettis, scellement des rayons, score ---------- */
+const confettis = [];
+const CONFETTI_COLORS = PALETTE.map(p => new THREE.Color(p.leather));
+function confettiBurst(pos, count){
+    count = count || 70;
+    const positions = new Float32Array(count*3), colors = new Float32Array(count*3), vel = [];
+    for(let i=0;i<count;i++){
+        positions[i*3]=pos.x; positions[i*3+1]=pos.y; positions[i*3+2]=pos.z;
+        const c = CONFETTI_COLORS[Math.floor(Math.random()*CONFETTI_COLORS.length)];
+        colors[i*3]=c.r; colors[i*3+1]=c.g; colors[i*3+2]=c.b;
+        const ang = Math.random()*Math.PI*2, sp = 1.2 + Math.random()*2.6;
+        vel.push(new THREE.Vector3(Math.cos(ang)*sp, 2.4 + Math.random()*2.8, Math.sin(ang)*sp));
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors,3));
+    const mat = new THREE.PointsMaterial({ size:0.07, vertexColors:true, transparent:true, opacity:1, depthWrite:false });
+    const pts = new THREE.Points(geo, mat); scene.add(pts);
+    confettis.push({ pts, vel, born:performance.now(), life:1600 });
+}
+function updateConfetti(dt){
+    for(let k=confettis.length-1;k>=0;k--){
+        const c = confettis[k], age = performance.now()-c.born;
+        if(age > c.life){ scene.remove(c.pts); c.pts.geometry.dispose(); c.pts.material.dispose(); confettis.splice(k,1); continue; }
+        const pos = c.pts.geometry.attributes.position.array;
+        for(let i=0;i<c.vel.length;i++){
+            c.vel[i].y -= 9.8*dt*0.6;
+            pos[i*3]+=c.vel[i].x*dt; pos[i*3+1]+=c.vel[i].y*dt; pos[i*3+2]+=c.vel[i].z*dt;
+        }
+        c.pts.geometry.attributes.position.needsUpdate = true;
+        c.pts.material.opacity = 1 - age/c.life;
+    }
+}
+
+// scelle un rayon plein : les livres deviennent inamovibles et une planche coulisse devant
+function sealRow(row, animate){
+    if(row.sealed && row.plank) return;
+    row.sealed = true;
+    for(const s of row.slots){                       // livres verrouillés (plus ramassables)
+        if(s.book){ const i = interactiveBooks.indexOf(s.book); if(i>-1) interactiveBooks.splice(i,1); }
+    }
+    const g = row.gallery, side = row.side, s = side.sign;
+    const frontDepth = row.bookDepthC - s*(BOOK_DEPTH/2 + 0.02);   // juste devant les dos
+    const panel = g.mkBox(side, row.alongC, row.bookY, frontDepth, row.segLen, BOOK_H + 0.14, 0.03, matWood);
+    g.group.add(panel);
+    row.plank = panel;
+    if(animate){
+        const finalX = panel.position.x, finalZ = panel.position.z;
+        if(side.axis === 'z') panel.position.x = finalX + row.segLen; else panel.position.z = finalZ + row.segLen;
+        const startX = panel.position.x, startZ = panel.position.z, t0 = performance.now(), dur = 460;
+        (function slide(){
+            const t = Math.min(1, (performance.now()-t0)/dur), e = 1 - Math.pow(1-t, 3);
+            panel.position.x = startX + (finalX-startX)*e;
+            panel.position.z = startZ + (finalZ-startZ)*e;
+            if(t < 1) requestAnimationFrame(slide);
+            else { panel.position.x = finalX; panel.position.z = finalZ; }
+        })();
+        const cp = g.toLocal(side, row.alongC, frontDepth);
+        confettiBurst(new THREE.Vector3(g.cx*ROOM + cp.x, row.bookY, g.cz*ROOM + cp.z));
+        Sound.chime();
+    }
+}
+
+// appelé après un rangement : le rayon se valide s'il est PLEIN et d'UNE SEULE couleur
+function maybeSealRow(row){
+    if(!row || row.sealed) return;
+    let ci = null;
+    for(const s of row.slots){
+        if(!s.occupied || !s.book) return;                       // pas encore plein
+        const c = s.book.userData.spineSpec ? s.book.userData.spineSpec.ci : undefined;
+        if(c === undefined) return;                              // tome-fragment / sans couleur -> invalide
+        if(ci === null) ci = c;
+        else if(c !== ci) return;                               // couleurs mélangées -> pas de validation
+    }
+    // rayon plein et monochrome
+    sealRow(row, true);
+    if(mods.sealed.indexOf(row.id) < 0) mods.sealed.push(row.id);
+    if(!Array.isArray(mods.sealedColors)) mods.sealedColors = [];
+    mods.sealedColors[ci] = (mods.sealedColors[ci]||0) + 1;   // stat : + un rayon de cette couleur
+    const gain = Math.round(row.slots.length * scoreMult);
+    addScore(gain);
+    const colorName = (PALETTE[ci] && PALETTE[ci].name) || '';
+    showToast('Rayon ' + colorName + ' compl\u00e9t\u00e9 !', '+' + gain + ' pi\u00e8ces');
+    persist();
+}
+
+let score = mods.score || 0;
+function addScore(n){ score += n; if(UI.score) UI.score.textContent = score; mods.score = score; }
+
+/* ---------- Chargement autour du joueur ---------- */
+function updateChunks(){
+    const pcx = Math.round(camera.position.x / ROOM);
+    const pcz = Math.round(camera.position.z / ROOM);
+    const keep = new Set();
+    for(let x=-RENDER_DIST;x<=RENDER_DIST;x++)
+    for(let z=-RENDER_DIST;z<=RENDER_DIST;z++){
+        const k = (pcx+x)+','+(pcz+z); keep.add(k);
+        if(!activeChunks.has(k)) activeChunks.set(k, new Gallery(pcx+x, pcz+z));
+    }
+    // « galerie explorée » = seulement celle où le joueur se tient réellement
+    const here = pcx + ',' + pcz;
+    if(!visitedGalleries.has(here)){ visitedGalleries.add(here); mods.visited.push(here); persist(); }
+    for(const [k,c] of activeChunks){ if(!keep.has(k)){ c.destroy(); activeChunks.delete(k); } }
+    activeColliders.length = 0; activeSlots.length = 0; activeOccluders.length = 0;
+    for(const c of activeChunks.values()){
+        for(const col of c.colliders) activeColliders.push(col);
+        for(const sl of c.slots) activeSlots.push(sl);
+        for(const oc of c.occluders) activeOccluders.push(oc);
+    }
+}
+
+/* ---------- Collision cercle / AABB ---------- */
+function collides(x, z){
+    for(const b of activeColliders){
+        const cx = Math.max(b.minX, Math.min(x, b.maxX));
+        const cz = Math.max(b.minZ, Math.min(z, b.maxZ));
+        const dx = x-cx, dz = z-cz;
+        if(dx*dx + dz*dz < PLAYER_R*PLAYER_R) return true;
+    }
+    return false;
+}
+
+/* ================================================================
+   ÉTAT & INTERACTIONS
+   ================================================================ */
+const moveState = { forward:false, backward:false, left:false, right:false, sprint:false };
+const velW = new THREE.Vector3();
+let hovered = null, heldBook = null, targetSlot = null, isReading = false, storeOpen = false, menuOpen = false;
+let placeMode = 'none';
+let readerPage = 0, prevTime = performance.now(), bobPhase = 0, prevBobSin = 0;
+let MAX_CARRY = 4 + (mods.upgrades.cap||0);   // emplacements de portage (améliorable)
+const hand = new Array(MAX_CARRY).fill(null); // livres portés (null = emplacement vide)
+let speedMult = 1 + (mods.upgrades.spd||0)*0.14;   // amélioration de vitesse
+let reachLvl  = mods.upgrades.reach||0;            // amélioration de portée de rangement
+let lanternLvl = mods.upgrades.lantern||0;         // dissipe le brouillard noir
+let scoreMult  = 1 + (mods.upgrades.mult||0)*0.30; // faveur : +30% de score par rayon
+let autoSortLvl = mods.upgrades.sort||0;           // saisit le prochain livre de même couleur après un rangement
+let hlBookOn  = !!(mods.upgrades.hlBook);           // surbrillance des livres visés (achat boutique)
+let hlSlotOn  = !!(mods.upgrades.hlSlot);           // surbrillance des emplacements vides (achat boutique)
+let activeIdx = 0;            // emplacement actif (choisi à la molette)
+let shakeUntil = 0;          // horodatage de fin du tremblement de refus
+let entered = false;
+
+const UI = {
+    start:  document.getElementById('start'),
+    cross:  document.getElementById('crosshair'),
+    prompt: document.getElementById('prompt'),
+    reader: document.getElementById('reader'),
+    coord:  document.getElementById('coord'),
+    fragN:  document.getElementById('frag-n'),
+    seed:   document.getElementById('seed'),
+    score:  document.getElementById('score-n'),
+    store:  document.getElementById('store'),
+    storeList: document.getElementById('store-list'),
+    storeScore: document.getElementById('store-score'),
+    toast:  document.getElementById('toast'),
+    toastK: document.getElementById('toast-k'),
+    toastT: document.getElementById('toast-t'),
+    touch:  document.getElementById('touch'),
+    carry:  document.getElementById('carry'),
+    pause:  document.getElementById('pause')
+};
+
+UI.start.addEventListener('click', () => { Sound.start(); controls.lock(); });
+UI.pause.addEventListener('click', () => { Sound.start(); controls.lock(); });
+let pauseSuppressUntil = 0;   // fenêtre pendant laquelle un 'unlock' différé ne doit PAS ouvrir la pause
+function suppressPauseBriefly(){ pauseSuppressUntil = performance.now() + 600; }
+
+controls.on('lock',   () => { entered = true; UI.start.classList.add('hide'); UI.pause.classList.add('hide'); });
+controls.on('unlock', () => {
+    if(isReading || storeOpen || menuOpen) return;        // une interface est ouverte : jamais de pause
+    if(performance.now() < pauseSuppressUntil) return;    // transition d'interface en cours (événement différé)
+    if(entered) openMenu();                                // le menu EST le menu pause
+    else UI.start.classList.remove('hide');
+});
+
+// Clic dans la scène pour reprendre la main quand le pointeur n'est pas verrouillé
+// (ex. après avoir fermé la boutique via Échap, quand le navigateur a refusé le
+// re-verrouillage immédiat) — évite de devoir repasser par le menu pause.
+container.addEventListener('click', () => {
+    if(isTouch || controls.isLocked || isReading || storeOpen || menuOpen) return;
+    const cfm = document.getElementById('confirm');
+    if(cfm && cfm.style.display === 'flex') return;
+    if(!UI.start.classList.contains('hide') || !UI.pause.classList.contains('hide')) return; // un menu est ouvert
+    Sound.start(); controls.lock();
+});
+
+// reprend la partie après une interface ; si le navigateur bloque le re-verrouillage, propose la pause
+function resumeGame(){
+    if(isTouch) return;
+    // Re-verrouillage immédiat ; si le navigateur le refuse (délai après Échap),
+    // un clic dans la scène reprend la main — plus de bascule forcée vers la pause.
+    controls.lock();
+}
+
+addEventListener('keydown', e => {
+    if(e.code==='Tab') e.preventDefault();
+    const cfm = document.getElementById('confirm');
+    if(cfm && cfm.style.display==='flex'){ if(e.code==='Escape') closeConfirm(false); return; }
+    if(menuOpen){ if(e.code==='Escape'||e.code==='KeyM') closeMenu(); return; }
+    if(storeOpen){ if(e.code==='Escape'||e.code==='KeyB') closeStore(); return; }
+    switch(e.code){
+        case 'KeyZ': case 'KeyW': moveState.forward = true; break;
+        case 'KeyS': moveState.backward = true; break;
+        case 'KeyQ': case 'KeyA': moveState.left = true; break;
+        case 'KeyD': moveState.right = true; break;
+        case 'ShiftLeft': case 'ShiftRight': moveState.sprint = true; break;
+        case 'KeyE': interact(); break;
+        case 'KeyR': toggleRead(); break;
+        case 'KeyG': throwBook(); break;
+        case 'KeyB': if(!isReading) toggleStore(); break;
+        case 'KeyM': if(!isReading) toggleMenu(); break;
+        case 'Tab': if(!isReading) cycleActive(1); break;
+        case 'Digit1': if(!isReading) setActive(0); break;
+        case 'Digit2': if(!isReading) setActive(1); break;
+        case 'Digit3': if(!isReading) setActive(2); break;
+        case 'Digit4': if(!isReading) setActive(3); break;
+        case 'ArrowRight': if(isReading) turnPage(1); break;
+        case 'ArrowLeft':  if(isReading) turnPage(-1); break;
+        case 'Escape': if(isReading) closeReader(); break;
+    }
+});
+addEventListener('keyup', e => {
+    switch(e.code){
+        case 'KeyZ': case 'KeyW': moveState.forward = false; break;
+        case 'KeyS': moveState.backward = false; break;
+        case 'KeyQ': case 'KeyA': moveState.left = false; break;
+        case 'KeyD': moveState.right = false; break;
+        case 'ShiftLeft': case 'ShiftRight': moveState.sprint = false; break;
+    }
+});
+addEventListener('mousedown', e => {
+    if(!controls.isLocked) return;
+    if(e.button===0) interact();
+    else if(e.button===2) throwBook();
+});
+addEventListener('wheel', e => {                 // molette : choisir l'emplacement de portage
+    if(!controls.isLocked || isReading) return;
+    cycleActive(e.deltaY > 0 ? 1 : -1);
+}, {passive:true});
+addEventListener('contextmenu', e => e.preventDefault());
+
+/* ---------- Prendre / poser / jeter / lire ---------- */
+function interact(){
+    // pointer un livre le ramasse toujours en priorité ; sinon, ranger dans un emplacement vide
+    if(placeMode === 'pick') pickUp(hovered);
+    else if(placeMode === 'slot' && targetSlot && !targetSlot.occupied) placeInSlot(targetSlot);
+    else if(placeMode === 'pickblocked') refuseShake();   // livre visé mais mains pleines
+    // 'none' : on garde le livre en main, on ne le pose jamais au sol avec E
+}
+
+function hasFreeSlot(){ return hand.indexOf(null) !== -1; }
+
+/* ---- portage : 4 emplacements, l'actif (molette) est tenu en main ---- */
+function refuseShake(){ shakeUntil = performance.now() + 300; Sound.blip(150); }
+
+function handPose(b){
+    b.geometry = bookGeo;                       // tenu debout
+    if(b.userData.mats) b.material = b.userData.mats;
+    b.position.set(0.32, -0.24, -0.55);
+    b.rotation.set(0.2, -0.4, 0.1);
+}
+function showActiveInHand(){
+    for(const b of hand){ if(b && b.parent === camera) camera.remove(b); }   // n'afficher que l'actif
+    const b = hand[activeIdx];
+    if(b){ camera.add(b); handPose(b); heldBook = b; }
+    else heldBook = null;
+    updateCarryHud();
+}
+function takeActiveOut(){                        // vide l'emplacement actif et renvoie le livre
+    const b = hand[activeIdx];
+    if(!b) return null;
+    if(b.parent === camera) camera.remove(b);
+    hand[activeIdx] = null; heldBook = null;
+    return b;
+}
+function setActive(i){
+    if(i < 0 || i >= MAX_CARRY || i === activeIdx) return;
+    activeIdx = i; showActiveInHand(); Sound.blip(300);
+}
+function cycleActive(dir){                       // molette / Tab : emplacement suivant (avec rebouclage)
+    activeIdx = (activeIdx + dir + MAX_CARRY) % MAX_CARRY;
+    showActiveInHand(); Sound.blip(300);
+}
+
+function collectFragment(book){
+    // les tomes dorés (fragments) ne se portent pas : on les recueille et ils disparaissent
+    const sp = book.userData.special;
+    const wp = new THREE.Vector3(); book.getWorldPosition(wp);
+    confettiBurst(wp, 46);                       // petit éclat doré à la disparition
+
+    if(sp != null && !discovered.has(sp)){
+        discovered.add(sp);
+        if(UI.fragN) UI.fragN.textContent = discovered.size;
+        if(mods.frags.indexOf(sp) < 0) mods.frags.push(sp);
+        showToast('Fragment recueilli', FRAGMENTS[sp]);
+        if(discovered.size === FRAG_TOTAL)
+            setTimeout(() => showToast('Le chemin est complet', 'Tu as r\u00e9uni les douze fragments.'), 1600);
+    } else {
+        showToast('Fragment', sp != null ? FRAGMENTS[sp] : '');
+    }
+    Sound.chime();
+
+    // nettoyage de la sauvegarde pour qu'il ne réapparaisse jamais
+    if(sp != null && mods.movedFrags.indexOf(sp) < 0) mods.movedFrags.push(sp);
+    book.userData.onPedestal = false;
+    if(book.userData.floorId != null){
+        const fi = mods.floor.findIndex(f => f.id === book.userData.floorId);
+        if(fi > -1) mods.floor.splice(fi, 1);
+        book.userData.floorId = null;
+    }
+    if(book.userData.slot){
+        if(book.userData.slot.id) mods.slots[book.userData.slot.id] = null;
+        book.userData.slot.occupied = false; book.userData.slot.book = null; book.userData.slot = null;
+    }
+
+    // retirer le tome du monde + des galeries
+    removeBookFromWorld(book);
+    for(const c of activeChunks.values()){
+        if(c.fragTome === book) c.fragTome = null;
+        if(c.books){ const bi = c.books.indexOf(book); if(bi > -1) c.books.splice(bi, 1); }
+    }
+    hovered = null;
+    persist();
+}
+
+function pickUp(book){
+    // un tome doré (fragment) n'est pas un livre à porter : on le recueille et il disparaît
+    if(book.userData.special != null){ collectFragment(book); return; }
+    // emplacement actif s'il est vide, sinon le premier emplacement libre
+    let idx = hand[activeIdx] ? hand.indexOf(null) : activeIdx;
+    if(idx === -1){ refuseShake(); return; }   // aucune place -> refus (caméra tremble)
+    // --- sauvegarde : enregistrer d'où vient le livre ---
+    if(book.userData.slot && book.userData.slot.id){
+        mods.slots[book.userData.slot.id] = null;      // cet emplacement d'étagère est désormais vide
+    }
+    if(book.userData.floorId != null){                 // livre ramassé au sol -> retirer de la sauvegarde
+        const fi = mods.floor.findIndex(f => f.id === book.userData.floorId);
+        if(fi > -1) mods.floor.splice(fi, 1);
+        book.userData.floorId = null;
+    }
+    if(book.userData.onPedestal && book.userData.special != null){
+        if(mods.movedFrags.indexOf(book.userData.special) < 0) mods.movedFrags.push(book.userData.special);
+        book.userData.onPedestal = false;
+    }
+    persist();
+
+    if(book.userData.slot){ book.userData.slot.occupied = false; book.userData.slot.book = null; book.userData.slot = null; }
+    if(book.parent) book.parent.remove(book);
+    const j = interactiveBooks.indexOf(book); if(j > -1) interactiveBooks.splice(j, 1);
+    hand[idx] = book;
+    activeIdx = idx;                            // le livre pris passe en main
+    showActiveInHand();
+    Sound.blip(book.userData.special != null ? 660 : 320);
+    hovered = null;
+}
+
+/* met à jour le HUD des couleurs en main */
+function updateCarryHud(){
+    const host = UI.carry; host.innerHTML = '';
+    for(let i = 0; i < MAX_CARRY; i++){
+        const slot = document.createElement('div');
+        slot.className = 'carry-slot';
+        if(i === activeIdx) slot.classList.add('active');   // l'emplacement actif est toujours mis en avant
+        const b = hand[i];
+        if(b){
+            slot.classList.add('filled');
+            const sp = document.createElement('div');
+            sp.className = 'cspine';
+            const ss = b.userData.spineSpec || {};
+            sp.style.background = ss.leather || '#5c2b12';
+            sp.style.setProperty('--band', ss.gold || 'rgba(255,230,160,.6)');
+            slot.appendChild(sp);
+            slot.title = b.userData.title || '';
+        }
+        slot.addEventListener('click', () => setActive(i));
+        slot.addEventListener('touchstart', e => { e.preventDefault(); setActive(i); }, {passive:false});
+        const n = document.createElement('div'); n.className = 'num'; n.textContent = (i + 1);
+        slot.appendChild(n);
+        host.appendChild(slot);
+    }
+}
+
+// après un rangement : enchaîne sur le livre suivant en main.
+// avec le bonus « Sens des reliures », priorité au prochain livre de MÊME couleur.
+function selectNextAfterPlace(ci){
+    if(autoSortLvl > 0 && ci != null){
+        for(let k = 1; k <= MAX_CARRY; k++){
+            const i = (activeIdx + k) % MAX_CARRY;
+            const b = hand[i];
+            if(b && b.userData.spineSpec && b.userData.spineSpec.ci === ci){
+                activeIdx = i; showActiveInHand(); return;
+            }
+        }
+    }
+    // sinon : premier emplacement rempli à partir de l'actif (QoL de base, toujours active)
+    for(let k = 1; k <= MAX_CARRY; k++){
+        const i = (activeIdx + k) % MAX_CARRY;
+        if(hand[i]){ activeIdx = i; showActiveInHand(); return; }
+    }
+    showActiveInHand();   // plus rien en main
+}
+
+function placeInSlot(slot){
+    const b = takeActiveOut(); if(!b) return;
+    const placedCi = b.userData.spineSpec ? b.userData.spineSpec.ci : null;
+    slot.gx.add(b);
+    b.geometry = bookGeo;
+    if(b.userData.mats) b.material = b.userData.mats;
+    b.position.set(slot.lx, slot.ly, slot.lz);
+    b.rotation.set(0, slot.rotY, 0);
+    slot.occupied = true; slot.book = b; b.userData.slot = slot;
+    // rattacher le livre à sa nouvelle galerie (nettoyage correct au déchargement)
+    if(slot.gallery.books.indexOf(b) === -1) slot.gallery.books.push(b);
+    if(interactiveBooks.indexOf(b) === -1) interactiveBooks.push(b);
+    // --- sauvegarde : cet emplacement contient désormais ce livre ---
+    if(slot.id) mods.slots[slot.id] = bookDesc(b);
+    mods.moved = (mods.moved||0) + 1;   // statistique : un livre rangé = un livre déplacé
+    persist();
+    targetSlot = null;
+    selectNextAfterPlace(placedCi);     // enchaîne sur le suivant (même couleur si bonus)
+    Sound.blip(300);
+    maybeSealRow(slot.row);             // rayon complété -> confettis + planche + score
+}
+
+function dropOnFloor(){
+    const b = takeActiveOut(); if(!b) return;
+    scene.add(b);
+    b.geometry = flatGeo;
+    if(b.userData.matsFlat) b.material = b.userData.matsFlat;
+
+    // Déposer sur la première surface solide visée : sol OU bois, jamais dedans
+    raycaster.setFromCamera(centerVec, camera);
+
+    // point visé sur le sol (plan y = 0) et sa distance le long du rayon
+    const pFloor = new THREE.Vector3();
+    const hitFloor = raycaster.ray.intersectPlane(FLOOR_PLANE, pFloor);
+    const floorDist = hitFloor ? raycaster.ray.origin.distanceTo(pFloor) : Infinity;
+
+    // le bois (meubles, planches, montants...) intercepte-t-il avant le sol ?
+    const woodHits = raycaster.intersectObjects(activeOccluders, false);
+    const wood = woodHits.length ? woodHits[0] : null;
+
+    let x, y, z;
+    if(wood && wood.distance < floorDist){
+        // on vise du bois : poser le livre SUR la surface touchée, jamais à l'intérieur
+        x = wood.point.x; y = wood.point.y + 0.03; z = wood.point.z;
+    } else if(hitFloor){
+        // point du sol visé, avec portée bornée si visée quasi horizontale
+        const dist = Math.hypot(pFloor.x - camera.position.x, pFloor.z - camera.position.z);
+        if(dist > 7){
+            const dir = new THREE.Vector3(pFloor.x - camera.position.x, 0, pFloor.z - camera.position.z).normalize();
+            x = camera.position.x + dir.x*7;
+            z = camera.position.z + dir.z*7;
+        } else { x = pFloor.x; z = pFloor.z; }
+        y = 0.05;
+    } else {
+        // visée vers le haut : repli devant les pieds
+        const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+        x = camera.position.x + fwd.x*0.8;
+        z = camera.position.z + fwd.z*0.8;
+        y = 0.05;
+    }
+    b.position.set(x, y, z);
+    b.rotation.set(0, Math.random()*Math.PI, 0);
+    b.userData.slot = null;
+    if(interactiveBooks.indexOf(b) === -1) interactiveBooks.push(b);   // reste ramassable
+    recordFloorBook(b);
+    targetSlot = null;
+    showActiveInHand();                 // passe au livre suivant s'il en reste
+    Sound.thud();
+}
+
+// enregistre un livre reposant au sol/sur une surface dans la sauvegarde
+function recordFloorBook(b){
+    b.userData.floorId = floorIdCounter++;
+    const d = bookDesc(b);
+    mods.floor.push({ id:b.userData.floorId, x:b.position.x, y:b.position.y, z:b.position.z, ry:b.rotation.y, mi:d.mi, frag:d.frag });
+    persist();
+}
+
+function throwBook(){
+    if(!hand[activeIdx]) return;
+    if(isReading) closeReader();
+    const b = takeActiveOut(); if(!b) return;
+    scene.add(b);
+    b.geometry = flatGeo;
+    if(b.userData.matsFlat) b.material = b.userData.matsFlat;
+    const w = new THREE.Vector3(); camera.getWorldPosition(w); b.position.copy(w);
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+    let vx=dir.x*8, vy=dir.y*8+2, vz=dir.z*8, last=performance.now();
+    b.userData.slot = null; targetSlot = null;
+    if(interactiveBooks.indexOf(b) === -1) interactiveBooks.push(b);   // reste ramassable
+    showActiveInHand();                 // passe au livre suivant s'il en reste
+    Sound.whoosh();
+    (function fly(){
+        const now=performance.now(), dt=Math.min((now-last)/1000,0.05); last=now;
+        vy += -9.8*dt; b.position.x+=vx*dt; b.position.y+=vy*dt; b.position.z+=vz*dt;
+        if(b.position.y<=0.05){ b.position.y=0.05; b.rotation.set(0, Math.random()*Math.PI, 0); Sound.thud(); recordFloorBook(b); return; }
+        requestAnimationFrame(fly);
+    })();
+}
+
+function toggleRead(){ if(!heldBook) return; isReading ? closeReader() : openReader(); }
+/* fin portage */
+
+/* ---------- Boutique / améliorations ---------- */
+const UPGRADES = [
+    { key:'lantern', name:'Lanterne du veilleur',   desc:'Repousse le brouillard noir (vision)', max:4, cost:l=>28+l*24 },
+    { key:'cap',     name:'Sac agrandi',            desc:'+1 emplacement de portage',            max:4, cost:l=>30+l*26 },
+    { key:'spd',     name:'Pas leste',              desc:'+14% de vitesse de déplacement',       max:4, cost:l=>20+l*18 },
+    { key:'reach',   name:'Œil du bibliothécaire',  desc:'Rangement plus facile (portée)',       max:3, cost:l=>20+l*18 },
+    { key:'sort',    name:'Sens des reliures',      desc:'Après un rangement, saisit le prochain livre de même couleur', max:1, cost:l=>36 },
+    { key:'mult',    name:'Faveur du bibliothécaire',desc:'+30% de score par rayon complété',    max:4, cost:l=>40+l*32 },
+    { key:'hlBook',  name:'Regard d\u2019ambre',      desc:'Souligne d\u2019or le livre (ou le fragment) que tu vises', max:1, cost:l=>26 },
+    { key:'hlSlot',  name:'Repère du rangeur',       desc:'Fait luire l\u2019emplacement vide où ranger le livre tenu', max:1, cost:l=>26 }
+];
+function applyUpgrades(){
+    const up = mods.upgrades;
+    const newCap = 4 + (up.cap||0);
+    while(hand.length < newCap) hand.push(null);
+    MAX_CARRY = newCap;
+    speedMult   = 1 + (up.spd||0)*0.14;
+    reachLvl    = up.reach||0;
+    lanternLvl  = up.lantern||0;
+    scoreMult   = 1 + (up.mult||0)*0.30;
+    autoSortLvl = up.sort||0;
+    hlBookOn    = !!up.hlBook;
+    hlSlotOn    = !!up.hlSlot;
+    applyFog();
+    updateCarryHud();
+}
+function buyUpgrade(u){
+    const lvl = mods.upgrades[u.key]||0; if(lvl >= u.max) return;
+    const cost = u.cost(lvl);
+    if(score < cost){ Sound.blip(160); return; }
+    score -= cost; mods.upgrades[u.key] = lvl+1; mods.score = score;
+    applyUpgrades(); persist();
+    if(UI.score) UI.score.textContent = score;
+    Sound.chime(); buildStore();
+}
+function buildStore(){
+    if(UI.storeScore) UI.storeScore.textContent = score;
+    UI.storeList.innerHTML = '';
+    for(const u of UPGRADES){
+        const lvl = mods.upgrades[u.key]||0, maxed = lvl >= u.max, cost = maxed ? null : u.cost(lvl);
+        const item = document.createElement('div'); item.className = 'store-item';
+        const info = document.createElement('div'); info.className = 'info';
+        info.innerHTML = '<b>'+u.name+'</b> <span class="lvl">Niv. '+lvl+' / '+u.max+'</span><div class="d">'+u.desc+'</div>';
+        const btn = document.createElement('button');
+        btn.textContent = maxed ? 'Max' : ('Acheter · '+cost);
+        btn.disabled = maxed || score < cost;
+        btn.addEventListener('click', () => buyUpgrade(u));
+        item.appendChild(info); item.appendChild(btn); UI.storeList.appendChild(item);
+    }
+}
+function toggleStore(){ storeOpen ? closeStore() : openStore(); }
+function openStore(){
+    storeOpen = true; if(isReading) closeReader();
+    suppressPauseBriefly();
+    controls.unlock();
+    UI.pause.classList.add('hide'); UI.start.classList.add('hide');
+    buildStore(); UI.store.style.display = 'flex'; Sound.page();
+}
+function closeStore(){
+    storeOpen = false; UI.store.style.display = 'none';
+    suppressPauseBriefly();
+    if(isTouch) return;
+    // Tente un re-verrouillage immédiat. Si le navigateur le refuse (bref délai
+    // imposé après une touche Échap), on ne bascule PAS sur le menu pause :
+    // un simple clic dans la scène reprend la main (voir écouteur ci-dessous).
+    controls.lock();
+}
+
+
+function openReader(){
+    isReading = true; suppressPauseBriefly(); controls.unlock();
+    UI.pause.classList.add('hide'); UI.start.classList.add('hide');
+    UI.reader.style.display = 'flex';
+    readerPage = 1 + Math.floor(mulberry32(heldBook.userData.uid*2654435761)()*400)*2;
+    const sp = heldBook.userData.special;
+    if(sp!=null && !discovered.has(sp)){
+        discovered.add(sp); UI.fragN.textContent = discovered.size;
+        if(mods.frags.indexOf(sp) < 0){ mods.frags.push(sp); persist(); }
+        showToast('Fragment retrouv\u00e9', FRAGMENTS[sp]); Sound.chime();
+        if(heldBook.material.emissive) heldBook.material.emissiveIntensity = 0.12;
+        if(discovered.size===FRAG_TOTAL) setTimeout(()=>showToast('Le chemin est complet','Tu as r\u00e9uni les douze fragments.'), 1600);
+    }
+    renderPages();
+}
+function closeReader(){ isReading = false; UI.reader.style.display='none'; suppressPauseBriefly(); resumeGame(); }
+function turnPage(d){ readerPage = Math.max(1, readerPage + d*2); renderPages(); Sound.page(); }
+
+function renderPages(){
+    const b = heldBook; if(!b) return;
+    const seed = b.userData.uid*2654435761;
+    document.getElementById('t-left').textContent = b.userData.title || '';
+    document.getElementById('t-right').textContent = '';
+    const sp = b.userData.special;
+    const bl = document.getElementById('b-left');
+    if(sp!=null){
+        bl.innerHTML = '<div class="fragment">&laquo; ' + FRAGMENTS[sp] + ' &raquo;</div>' +
+                       '<div>' + pageText(mulberry32(seed + readerPage), 90) + '</div>';
+    } else {
+        bl.textContent = pageText(mulberry32(seed + readerPage), 140);
+    }
+    document.getElementById('b-right').textContent = pageText(mulberry32(seed + readerPage + 1), 140);
+    document.getElementById('n-left').textContent = 'p. ' + readerPage;
+    document.getElementById('n-right').textContent = 'p. ' + (readerPage+1);
+}
+
+let toastTimer = null;
+function showToast(k, t){
+    UI.toastK.textContent = k; UI.toastT.textContent = t;
+    UI.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>UI.toast.classList.remove('show'), 4200);
+}
+
+/* ---------- Ciblage d'un emplacement vide ---------- */
+const slotRay = new THREE.Raycaster();
+function computeTargetSlot(){
+    if(!heldBook){ targetSlot = null; return; }
+    const cam = camera.position;
+    const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
+    let best = null, bestDot = 0.955 - reachLvl*0.012;   // cône élargi par l'amélioration
+    const maxDist = 3.4 + reachLvl*0.6;
+    for(const s of activeSlots){
+        if(s.occupied) continue;
+        const dx=s.wx-cam.x, dy=s.wy-cam.y, dz=s.wz-cam.z;
+        const dist = Math.hypot(dx,dy,dz);
+        if(dist>maxDist || dist<0.35) continue;
+        const dot = (dx*fwd.x + dy*fwd.y + dz*fwd.z)/dist;
+        if(dot>bestDot){ bestDot = dot; best = s; }
+    }
+    // ligne de vue : refuser un emplacement séparé du joueur par un mur ou du bois
+    if(best){
+        const dir = new THREE.Vector3(best.wx-cam.x, best.wy-cam.y, best.wz-cam.z);
+        const d = dir.length(); dir.normalize();
+        slotRay.set(cam, dir);
+        const occ = slotRay.intersectObjects(activeOccluders, false);
+        if(occ.length && occ[0].distance < d - 0.2) best = null;   // obstacle avant l'emplacement -> caché
+    }
+    targetSlot = best;
+}
+
+/* ---------- Réticule / invite ---------- */
+function updateRaycast(){
+    raycaster.setFromCamera(centerVec, camera);
+
+    // livre ramassable sous le réticule (sauf s'il est masqué par du bois plus proche)
+    const hits = raycaster.intersectObjects(interactiveBooks, false);
+    let pick = null;
+    if(hits.length && hits[0].distance < 3.4){
+        const occ = raycaster.intersectObjects(activeOccluders, false);
+        if(!(occ.length && occ[0].distance < hits[0].distance - 0.02)) pick = hits[0].object;
+    }
+
+    const held = hand[activeIdx];
+    computeTargetSlot();   // emplacement d'étagère vide visé (uniquement si on tient un livre)
+
+    let txt = '', cross = false;
+    if(pick){
+        hovered = pick;
+        if(pick.userData.special != null){
+            // tome doré : toujours recueillable, même les mains pleines (il ne se porte pas)
+            placeMode = 'pick'; cross = true;
+            txt = '<b>E / Clic</b> Recueillir le fragment';
+        } else if(hasFreeSlot()){
+            // pointer un livre : on le ramasse (priorité absolue), sauf si les mains sont pleines
+            placeMode = 'pick'; cross = true;
+            txt = '<b>E / Clic</b> Prendre le livre';
+        } else {
+            placeMode = 'pickblocked';
+            txt = 'Mains pleines &middot; range ou jette (<b>G</b>) un livre';
+        }
+    } else if(held && targetSlot){
+        // emplacement d'étagère vide visé : on peut y ranger le livre tenu
+        placeMode = 'slot'; hovered = null; cross = true; txt = '<b>E / Clic</b> Ranger ici';
+    } else {
+        placeMode = 'none'; hovered = null;
+        if(held) txt = 'Vise un emplacement vide pour ranger';   // jamais de dépôt au sol avec E
+    }
+
+    UI.cross.classList.toggle('active', cross);
+    if(txt || held){
+        UI.prompt.style.display = 'block';
+        UI.prompt.innerHTML = txt + (held ? ' &nbsp;&middot;&nbsp; <b>R</b> Lire &nbsp;&middot;&nbsp; <b>G</b> Jeter' : '');
+    } else {
+        UI.prompt.style.display = 'none';
+    }
+
+    updateHighlight();   // surbrillance 3D de la cible sous le réticule
+}
+
+/* ================================================================
+   SON PROCÉDURAL
+   ================================================================ */
+const Sound = (function(){
+    let ctx=null, master=null, sfxBus=null, muted=false, noiseBuf=null;
+    // --- musique d'ambiance ---
+    let musicBus=null, musicOn=false, musicVol=0.75, musicStarted=false;
+    let musicTimer=null, droneNodes=[];
+
+    // gamme feutrée (do mineur pentatonique-ish), fréquences en Hz
+    const SCALE = [130.81, 155.56, 174.61, 196.00, 233.08, 261.63, 311.13, 349.23];
+    // accords (indices dans SCALE) enchaînés lentement
+    const CHORDS = [ [0,2,4], [1,3,5], [0,3,5], [2,4,6], [0,2,5] ];
+    let chordIdx = 0;
+
+    function ensure(){
+        if(ctx) return;
+        ctx = new (window.AudioContext||window.webkitAudioContext)();
+        master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
+        sfxBus = ctx.createGain(); sfxBus.gain.value = 0.5; sfxBus.connect(master);
+        musicBus = ctx.createGain(); musicBus.gain.value = 0; musicBus.connect(master);
+        noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for(let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+    }
+
+    // une note tenue et douce (nappe) qui monte et redescend sur ~dur secondes
+    function pad(freq, dur, vol){
+        if(!ctx) return null;
+        const t = ctx.currentTime;
+        const o1 = ctx.createOscillator(); o1.type='sine';     o1.frequency.value = freq;
+        const o2 = ctx.createOscillator(); o2.type='triangle'; o2.frequency.value = freq*2.001; // léger battement
+        const det = ctx.createOscillator(); det.type='sine';   det.frequency.value = freq*0.999;
+        const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value = 1200; f.Q.value = 0.7;
+        const g = ctx.createGain(); g.gain.value = 0;
+        o1.connect(f); o2.connect(f); det.connect(f); f.connect(g); g.connect(musicBus);
+        const atk = dur*0.4, rel = dur*0.5;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(vol, t+atk);
+        g.gain.linearRampToValueAtTime(0.0001, t+dur);
+        o1.start(t); o2.start(t); det.start(t);
+        o1.stop(t+dur+0.1); o2.stop(t+dur+0.1); det.stop(t+dur+0.1);
+        return { o1,o2,det,g };
+    }
+
+    // enchaîne un accord toutes les ~9 s : nappe lente et méditative
+    function scheduleChord(){
+        if(!musicOn || !ctx) return;
+        const chord = CHORDS[chordIdx % CHORDS.length]; chordIdx++;
+        const dur = 11;
+        chord.forEach((si, k) => {
+            const freq = SCALE[si] * (k===0 ? 0.5 : 1);   // basse une octave dessous
+            pad(freq, dur, k===0 ? 0.22 : 0.17);          // basse plus soutenue, nappes bien audibles
+        });
+        // une note aiguë isolée, parfois, comme une goutte de lumière
+        if(Math.random() < 0.5){
+            const hi = SCALE[3 + Math.floor(Math.random()*4)] * 2;
+            setTimeout(()=>{ if(musicOn) pad(hi, 6, 0.09); }, 2500 + Math.random()*3000);
+        }
+        musicTimer = setTimeout(scheduleChord, (dur - 2.5) * 1000);
+    }
+
+    function startMusic(){
+        if(!ctx || musicStarted) return;
+        musicStarted = true; chordIdx = 0;
+        musicBus.gain.cancelScheduledValues(ctx.currentTime);
+        musicBus.gain.setValueAtTime(0, ctx.currentTime);
+        musicBus.gain.linearRampToValueAtTime(muted?0:musicVol, ctx.currentTime + 3);
+        scheduleChord();
+    }
+    function stopMusic(){
+        musicStarted = false;
+        clearTimeout(musicTimer); musicTimer=null;
+        if(ctx && musicBus){
+            musicBus.gain.cancelScheduledValues(ctx.currentTime);
+            musicBus.gain.setValueAtTime(musicBus.gain.value, ctx.currentTime);
+            musicBus.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.5);
+        }
+    }
+
+    function noiseBurst(dur, freq, type, vol){
+        if(!ctx||muted) return;
+        const src = ctx.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
+        const f = ctx.createBiquadFilter(); f.type=type||'bandpass'; f.frequency.value=freq; f.Q.value=1;
+        const gg = ctx.createGain(); const t=ctx.currentTime;
+        gg.gain.setValueAtTime(vol, t); gg.gain.exponentialRampToValueAtTime(0.001, t+dur);
+        src.connect(f).connect(gg).connect(sfxBus); src.start(t); src.stop(t+dur);
+    }
+    function tone(freq, dur, type, vol){
+        if(!ctx||muted) return;
+        const o=ctx.createOscillator(); o.type=type||'sine'; o.frequency.value=freq;
+        const gg=ctx.createGain(); const t=ctx.currentTime;
+        gg.gain.setValueAtTime(vol||0.2,t); gg.gain.exponentialRampToValueAtTime(0.001,t+dur);
+        o.connect(gg).connect(sfxBus); o.start(t); o.stop(t+dur);
+    }
+    return {
+        start(){ ensure(); if(ctx.state==='suspended') ctx.resume(); if(musicOn) startMusic(); },
+        // coupe globale (effets + musique) — conservée pour compatibilité
+        toggle(){ if(!ctx) return muted; muted=!muted; master.gain.value = muted?0:1; return muted; },
+        isMuted(){ return muted; },
+        // effets sonores on/off (agit sur sfxBus)
+        setSfx(on){ if(sfxBus) sfxBus.gain.value = on ? 0.5 : 0; },
+        // musique on/off
+        setMusic(on){
+            musicOn = on;
+            if(!ctx){ return; }              // démarrera à Sound.start()
+            if(on){ if(!musicStarted) startMusic(); else musicBus.gain.linearRampToValueAtTime(muted?0:musicVol, ctx.currentTime+1); }
+            else stopMusic();
+        },
+        setMusicVolume(v){ musicVol = Math.max(0, Math.min(1, v));
+            if(ctx && musicBus && musicStarted && !muted) musicBus.gain.linearRampToValueAtTime(musicVol, ctx.currentTime+0.2); },
+        musicIsOn(){ return musicOn; },
+        step(){ noiseBurst(0.09, 220+Math.random()*80, 'lowpass', 0.14); },
+        page(){ noiseBurst(0.18, 1800, 'bandpass', 0.16); },
+        thud(){ noiseBurst(0.16, 140, 'lowpass', 0.22); },
+        whoosh(){ noiseBurst(0.28, 900, 'bandpass', 0.10); },
+        blip(f){ tone(f||300, 0.12, 'sine', 0.15); },
+        chime(){ tone(880,0.5,'sine',0.16); setTimeout(()=>tone(1320,0.6,'sine',0.13),120); }
+    };
+})();
+
+/* ---------- Fenêtre de confirmation habillée aux couleurs du jeu ---------- */
+const UIConfirm = {
+    root:    document.getElementById('confirm'),
+    eyebrow: document.getElementById('confirm-eyebrow'),
+    title:   document.getElementById('confirm-title'),
+    msg:     document.getElementById('confirm-msg'),
+    yes:     document.getElementById('confirm-yes'),
+    no:      document.getElementById('confirm-no')
+};
+let confirmCb = null;
+function askConfirm(title, msg, onYes, eyebrow){
+    confirmCb = onYes || null;
+    UIConfirm.eyebrow.textContent = eyebrow || 'Confirmation';
+    UIConfirm.title.textContent = title || '';
+    UIConfirm.msg.textContent = msg || '';
+    UIConfirm.root.style.display = 'flex';
+    try{ Sound.page(); }catch(e){}
+}
+function closeConfirm(ok){
+    UIConfirm.root.style.display = 'none';
+    const cb = confirmCb; confirmCb = null;
+    if(ok && cb) cb();
+}
+if(UIConfirm.yes) UIConfirm.yes.addEventListener('click', () => { try{ Sound.blip(520); }catch(e){} closeConfirm(true); });
+if(UIConfirm.no)  UIConfirm.no.addEventListener('click',  () => { try{ Sound.blip(200); }catch(e){} closeConfirm(false); });
+// clic sur le fond (hors panneau) = annuler
+UIConfirm.root.addEventListener('click', e => { if(e.target === UIConfirm.root) closeConfirm(false); });
+
+/* ================================================================
+   CONTRÔLES TACTILES
+   ================================================================ */
+const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+const touchMove = { x:0, y:0 };
+if(isTouch){
+    UI.touch.style.display='block';
+    document.getElementById('panel').classList.add('hide');
+    document.getElementById('start-hint').textContent = 'Touche l\u2019\u00e9cran pour commencer';
+    UI.start.addEventListener('touchstart', e => { e.preventDefault(); Sound.start(); UI.start.classList.add('hide'); }, {passive:false});
+
+    const joy = document.getElementById('joy'), stick = document.getElementById('joy-stick');
+    let joyId = null, jcx=0, jcy=0;
+    joy.addEventListener('touchstart', e=>{ const t=e.changedTouches[0]; joyId=t.identifier;
+        const r=joy.getBoundingClientRect(); jcx=r.left+r.width/2; jcy=r.top+r.height/2; e.preventDefault(); }, {passive:false});
+    addEventListener('touchmove', e=>{
+        for(const t of e.changedTouches) if(t.identifier===joyId){
+            let dx=t.clientX-jcx, dy=t.clientY-jcy; const max=52, len=Math.hypot(dx,dy);
+            if(len>max){ dx=dx/len*max; dy=dy/len*max; }
+            stick.style.transform = 'translate('+dx+'px,'+dy+'px)';
+            touchMove.x = dx/max; touchMove.y = dy/max;
+        }
+    }, {passive:false});
+    addEventListener('touchend', e=>{ for(const t of e.changedTouches) if(t.identifier===joyId){
+        joyId=null; touchMove.x=touchMove.y=0; stick.style.transform='translate(0,0)'; } });
+
+    let lookId=null, lx=0, ly=0;
+    UI.touch.addEventListener('touchstart', e=>{
+        for(const t of e.changedTouches)
+            if(t.clientX > innerWidth*0.45 && lookId===null && !e.target.classList.contains('touch-btn')){ lookId=t.identifier; lx=t.clientX; ly=t.clientY; }
+    }, {passive:false});
+    UI.touch.addEventListener('touchmove', e=>{
+        for(const t of e.changedTouches) if(t.identifier===lookId){
+            controls.lookBy((t.clientX-lx)*1.6, (t.clientY-ly)*1.6); lx=t.clientX; ly=t.clientY;
+        }
+    }, {passive:false});
+    UI.touch.addEventListener('touchend', e=>{ for(const t of e.changedTouches) if(t.identifier===lookId) lookId=null; });
+
+    const bind = (id, fn)=>document.getElementById(id).addEventListener('touchstart', e=>{ e.preventDefault(); fn(); }, {passive:false});
+    bind('t-act', interact); bind('t-read', toggleRead); bind('t-throw', throwBook);
+    controls.isLocked = true;
+}
+
+/* ================================================================
+   BOUCLE
+   ================================================================ */
+const active = () => controls.isLocked || isTouch;
+
+function animate(){
+    requestAnimationFrame(animate);
+    const now = performance.now();
+    const dt = Math.min((now-prevTime)/1000, 0.05); prevTime = now;
+
+    if(active() && !isReading && !storeOpen && !menuOpen){
+        const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y=0; fwd.normalize();
+        const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0,1,0)).normalize();
+
+        let iz = (moveState.forward?1:0) - (moveState.backward?1:0);
+        let ix = (moveState.right?1:0)   - (moveState.left?1:0);
+        if(isTouch){ iz += -touchMove.y; ix += touchMove.x; }
+
+        const wish = new THREE.Vector3();
+        wish.addScaledVector(fwd, iz).addScaledVector(right, ix);
+        if(wish.lengthSq()>1) wish.normalize();
+
+        const speed = (moveState.sprint ? 6.4 : 3.6) * speedMult;
+        const target = wish.multiplyScalar(speed);
+        velW.x += (target.x - velW.x) * Math.min(1, 12*dt);
+        velW.z += (target.z - velW.z) * Math.min(1, 12*dt);
+
+        const nx = camera.position.x + velW.x*dt;
+        if(!collides(nx, camera.position.z)) camera.position.x = nx; else velW.x = 0;
+        const nz = camera.position.z + velW.z*dt;
+        if(!collides(camera.position.x, nz)) camera.position.z = nz; else velW.z = 0;
+
+        const moving = Math.hypot(velW.x, velW.z);
+        bobPhase += moving * dt * 1.9;
+        const bob = Math.sin(bobPhase) * 0.05 * Math.min(moving/3.6, 1);
+        camera.position.y = EYE + bob;
+        if(prevBobSin <= 0 && Math.sin(bobPhase) > 0 && moving > 0.6) Sound.step();
+        prevBobSin = Math.sin(bobPhase);
+
+        updateChunks();
+        UI.coord.textContent = Math.round(camera.position.x/ROOM) + ' : ' + Math.round(camera.position.z/ROOM);
+    }
+
+    for(const c of activeChunks.values())
+        if(c.light) c.light.intensity = c.lampBase + Math.sin((now/500)+c.flick)*0.18 + (Math.random()-0.5)*0.06;
+    if(dust){ dust.position.set(camera.position.x, 0, camera.position.z); dust.rotation.y += dt*0.02; }
+    updateConfetti(dt);
+
+    updateRaycast();
+
+    // tremblement de refus (« non ») : décalage transitoire, restauré aussitôt après le rendu
+    let sx = 0, sy = 0;
+    if(now < shakeUntil){
+        const k = (shakeUntil - now) / 300;              // 1 -> 0
+        sx = Math.sin(now * 0.045) * 0.05 * k;
+        sy = Math.cos(now * 0.07)  * 0.035 * k;
+        camera.position.x += sx; camera.position.y += sy;
+    }
+    renderer.render(scene, camera);
+    camera.position.x -= sx; camera.position.y -= sy;
+}
+
+addEventListener('resize', () => {
+    camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+});
+
+// recrée les livres posés au sol lors des parties précédentes (indépendants des galeries)
+function spawnSavedFloorBooks(){
+    for(const f of mods.floor){
+        const b = makeBookFromDesc({ mi:f.mi, frag:f.frag });
+        b.geometry = flatGeo;
+        if(b.userData.matsFlat) b.material = b.userData.matsFlat;
+        b.position.set(f.x, f.y, f.z); b.rotation.set(0, f.ry || 0, 0);
+        b.userData.floorId = f.id;
+        scene.add(b); interactiveBooks.push(b);
+    }
+}
+
+// affichage du seed + compteur de fragments restauré
+if(UI.seed) UI.seed.textContent = GAME_SEED.toString(36).toUpperCase();
+if(UI.fragN) UI.fragN.textContent = discovered.size;
+if(UI.score) UI.score.textContent = score;
+const btnStore = document.getElementById('btn-store');
+if(btnStore) btnStore.addEventListener('click', () => { Sound.start(); toggleStore(); });
+
+/* ================================================================
+   MENU DU JEU : statistiques + réglages sonores + nouvelle partie
+   ================================================================ */
+const UIMenu = {
+    root:    document.getElementById('menu'),
+    btn:     document.getElementById('btn-menu'),
+    resume:  document.getElementById('menu-resume'),
+    // stats
+    score:   document.getElementById('st-score'),
+    frag:    document.getElementById('st-frag'),
+    shelves: document.getElementById('st-shelves'),
+    moved:   document.getElementById('st-moved'),
+    upg:     document.getElementById('st-upg'),
+    gal:     document.getElementById('st-gal'),
+    floor:   document.getElementById('st-floor'),
+    seed:    document.getElementById('st-seed'),
+    colorStats: document.getElementById('color-stats'),
+    colorPref:  document.getElementById('color-pref'),
+    // réglages
+    tgMusic: document.getElementById('tg-music'),
+    rgMusic: document.getElementById('rg-music'),
+    tgSfx:   document.getElementById('tg-sfx'),
+    newBtn:  document.getElementById('menu-new')
+};
+
+// préférences audio persistantes (indépendantes du seed)
+const PREF_KEY = SAVE_PREFIX + 'prefs';
+const prefs = (function(){
+    const def = { music:true, musicVol:0.75, sfx:true };
+    try{ const raw = localStorage.getItem(PREF_KEY); if(raw) return Object.assign(def, JSON.parse(raw)); }catch(e){}
+    return def;
+})();
+function savePrefs(){ try{ localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); }catch(e){} }
+
+function setToggle(el, on){ el.classList.toggle('on', on); el.setAttribute('aria-checked', on ? 'true' : 'false'); }
+
+// applique les préférences au moteur audio (au démarrage et à chaque changement)
+function applyAudioPrefs(){
+    Sound.setSfx(prefs.sfx);
+    Sound.setMusicVolume(prefs.musicVol);
+    Sound.setMusic(prefs.music);
+    setToggle(UIMenu.tgMusic, prefs.music);
+    setToggle(UIMenu.tgSfx, prefs.sfx);
+    UIMenu.rgMusic.value = Math.round(prefs.musicVol*100);
+    UIMenu.rgMusic.disabled = !prefs.music;
+}
+
+function refreshStats(){
+    UIMenu.score.textContent   = score;
+    UIMenu.frag.innerHTML      = discovered.size + ' <small>/ ' + FRAG_TOTAL + '</small>';
+    UIMenu.shelves.textContent = (mods.sealed ? mods.sealed.length : 0);
+    UIMenu.moved.textContent   = (mods.moved || 0);
+    let upgCount = 0; for(const k in mods.upgrades) upgCount += (mods.upgrades[k]||0);
+    UIMenu.upg.textContent     = upgCount;
+    UIMenu.gal.textContent     = visitedGalleries.size;
+    UIMenu.floor.textContent   = (mods.floor ? mods.floor.length : 0);
+    UIMenu.seed.textContent    = GAME_SEED.toString(36).toUpperCase();
+    refreshColorStats();
+}
+
+function refreshColorStats(){
+    const counts = Array.isArray(mods.sealedColors) ? mods.sealedColors : [];
+    let total = 0, max = 0;
+    for(let i=0;i<PALETTE.length;i++){ const n = counts[i]||0; total += n; if(n>max) max = n; }
+
+    // barres par couleur (uniquement celles ayant au moins un rayon), triées décroissant
+    UIMenu.colorStats.innerHTML = '';
+    if(total === 0){
+        const none = document.createElement('div'); none.className = 'none';
+        none.textContent = 'Aucun rayon monochrome complété pour l\u2019instant.';
+        UIMenu.colorStats.appendChild(none);
+    } else {
+        const order = [];
+        for(let i=0;i<PALETTE.length;i++) if((counts[i]||0) > 0) order.push(i);
+        order.sort((a,b)=>(counts[b]||0)-(counts[a]||0));
+        for(const i of order){
+            const n = counts[i]||0;
+            const row = document.createElement('div'); row.className = 'color-row';
+            const sw = document.createElement('span'); sw.className = 'swatch';
+            sw.style.background = PALETTE[i].leather;
+            const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = PALETTE[i].name;
+            const bar = document.createElement('span'); bar.className = 'bar';
+            const fill = document.createElement('i');
+            fill.style.width = Math.round((n/max)*100) + '%';
+            fill.style.background = PALETTE[i].leather;
+            bar.appendChild(fill);
+            const num = document.createElement('span'); num.className = 'cnum'; num.textContent = n;
+            row.appendChild(sw); row.appendChild(nm); row.appendChild(bar); row.appendChild(num);
+            UIMenu.colorStats.appendChild(row);
+        }
+    }
+
+    // message de préférence : la couleur au meilleur taux de rayons finis
+    if(total === 0){
+        UIMenu.colorPref.className = 'color-pref empty';
+        UIMenu.colorPref.textContent = 'Complète des rayons d\u2019une seule couleur pour r\u00e9v\u00e9ler la teinte que tu pr\u00e9f\u00e8res.';
+    } else {
+        // repérer le(s) maximum(s)
+        let tops = [];
+        for(let i=0;i<PALETTE.length;i++){ if((counts[i]||0) === max && max>0) tops.push(i); }
+        const pct = Math.round((max/total)*100);
+        UIMenu.colorPref.className = 'color-pref';
+        if(tops.length === 1){
+            UIMenu.colorPref.innerHTML = 'Tu sembles affectionner le <b>' + PALETTE[tops[0]].name.toLowerCase() +
+                '</b> : c\u2019est la couleur que tu ach\u00e8ves le plus souvent (' + max +
+                (max>1?' rayons':' rayon') + ', ' + pct + '\u202f% de tes rayons finis).';
+        } else {
+            const names = tops.map(i=>PALETTE[i].name.toLowerCase());
+            const last = names.pop();
+            UIMenu.colorPref.innerHTML = 'Tu h\u00e9sites entre le <b>' + names.join(', le ') + '</b> et le <b>' +
+                last + '</b> : ces teintes sont \u00e0 \u00e9galit\u00e9 (' + max + (max>1?' rayons':' rayon') + ' chacune).';
+        }
+    }
+}
+
+function openMenu(){
+    if(menuOpen) return;
+    menuOpen = true;
+    Sound.start();
+    if(isReading) closeReader();
+    if(storeOpen) closeStore();
+    suppressPauseBriefly();
+    controls.unlock();
+    UI.pause.classList.add('hide'); UI.start.classList.add('hide');
+    refreshStats();
+    UIMenu.root.style.display = 'flex';
+    Sound.page();
+}
+function closeMenu(){
+    if(!menuOpen) return;
+    menuOpen = false;
+    UIMenu.root.style.display = 'none';
+    suppressPauseBriefly();
+    if(isTouch) return;
+    controls.lock();
+}
+function toggleMenu(){ menuOpen ? closeMenu() : openMenu(); }
+
+UIMenu.btn.addEventListener('click', () => toggleMenu());
+if(UIMenu.resume) UIMenu.resume.addEventListener('click', () => { Sound.blip(440); closeMenu(); });
+
+// interactions réglages
+function onMusicToggle(){
+    prefs.music = !prefs.music; savePrefs();
+    Sound.setMusic(prefs.music);
+    setToggle(UIMenu.tgMusic, prefs.music);
+    UIMenu.rgMusic.disabled = !prefs.music;
+    Sound.blip(prefs.music ? 440 : 200);
+}
+function onSfxToggle(){
+    prefs.sfx = !prefs.sfx; savePrefs();
+    Sound.setSfx(prefs.sfx);
+    setToggle(UIMenu.tgSfx, prefs.sfx);
+    if(prefs.sfx) Sound.blip(440);
+}
+UIMenu.tgMusic.addEventListener('click', onMusicToggle);
+UIMenu.tgSfx.addEventListener('click', onSfxToggle);
+UIMenu.tgMusic.addEventListener('keydown', e => { if(e.code==='Enter'||e.code==='Space'){ e.preventDefault(); onMusicToggle(); } });
+UIMenu.tgSfx.addEventListener('keydown', e => { if(e.code==='Enter'||e.code==='Space'){ e.preventDefault(); onSfxToggle(); } });
+UIMenu.rgMusic.addEventListener('input', () => {
+    prefs.musicVol = (parseInt(UIMenu.rgMusic.value,10)||0)/100;
+    Sound.setMusicVolume(prefs.musicVol);
+});
+UIMenu.rgMusic.addEventListener('change', savePrefs);
+
+UIMenu.newBtn.addEventListener('click', () => {
+    askConfirm(
+        'Ouvrir une nouvelle biblioth\u00e8que ?',
+        'Un nouveau seed d\u00e9ploiera des galeries in\u00e9dites. La partie actuelle reste sauvegard\u00e9e sous son seed \u2014 tu pourras y revenir.',
+        newGame,
+        'Nouvelle partie'
+    );
+});
+
+// fermeture au clic sur le fond
+UIMenu.root.addEventListener('click', e => { if(e.target === UIMenu.root) closeMenu(); });
+
+// applique les préférences audio dès le chargement
+applyAudioPrefs();
+
+spawnSavedFloorBooks();
+applyFog();
+updateChunks();
+updateCarryHud();
+animate();
+</script>
+</body>
+</html>
